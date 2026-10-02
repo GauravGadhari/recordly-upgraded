@@ -163,6 +163,7 @@ export type EditorEffectSection =
 	| "sounds"
 	| "transitions"
 	| "memes"
+	| "highlights"
 	| `ext:${string}`;
 
 export type ZoomTransitionEasing = "recordly" | "glide" | "smooth" | "snappy" | "linear";

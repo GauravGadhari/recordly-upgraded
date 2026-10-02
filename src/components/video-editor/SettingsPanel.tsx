@@ -36,6 +36,7 @@ import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import type { AppLocale } from "../../i18n/config";
 import { SUPPORTED_LOCALES } from "../../i18n/config";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
+import { HighlightSettingsPanel } from "./HighlightSettingsPanel";
 import CaptionListPanel from "./CaptionListPanel";
 import type { CaptionRetimeSpan } from "./captionOps";
 import KeystrokeSettingsPanel from "./KeystrokeSettingsPanel";
@@ -721,6 +722,8 @@ interface SettingsPanelProps {
 	onAnnotationBlurColorChange?: (id: string, color: string) => void;
 	onAnnotationHighlightDataChange?: (id: string, highlightData: HighlightData) => void;
 	onAnnotationDelete?: (id: string) => void;
+	onAddHighlight?: () => void;
+	onSelectAnnotation?: (id: string | null) => void;
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
 	keystrokes?: KeystrokeEvent[];
@@ -1186,6 +1189,8 @@ export function SettingsPanel({
 	onAnnotationBlurColorChange,
 	onAnnotationHighlightDataChange,
 	onAnnotationDelete,
+	onAddHighlight,
+	onSelectAnnotation,
 	autoCaptions = [],
 	autoCaptionSettings = DEFAULT_AUTO_CAPTION_SETTINGS,
 	keystrokes = [],
@@ -3370,6 +3375,24 @@ export function SettingsPanel({
 				) : null;
 			case "memes":
 				return mediaLibrary ? <MemeSettingsPanel {...mediaLibrary} /> : null;
+			case "highlights":
+				return (
+					<HighlightSettingsPanel
+						annotationRegions={annotationRegions}
+						selectedAnnotationId={selectedAnnotationId}
+						onSelectAnnotation={onSelectAnnotation}
+						onAddHighlight={onAddHighlight}
+						onAnnotationDelete={onAnnotationDelete}
+						onAnnotationContentChange={onAnnotationContentChange}
+						onAnnotationTypeChange={onAnnotationTypeChange}
+						onAnnotationStyleChange={onAnnotationStyleChange}
+						onAnnotationFigureDataChange={onAnnotationFigureDataChange}
+						onAnnotationBlurIntensityChange={onAnnotationBlurIntensityChange}
+						onAnnotationBlurColorChange={onAnnotationBlurColorChange}
+						onAnnotationHighlightDataChange={onAnnotationHighlightDataChange}
+						onSeekToTime={onSeekToTime}
+					/>
+				);
 			case "keystrokes":
 				return (
 					<KeystrokeSettingsPanel

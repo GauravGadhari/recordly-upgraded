@@ -3,6 +3,7 @@ import {
 	ClosedCaptioning,
 	Cursor,
 	Gear,
+	Highlighter,
 	Keyboard,
 	PuzzlePiece,
 	Smiley,
@@ -31,6 +32,11 @@ export function EditorSidebar({ t, activeSection, setActiveSection, settingsPane
 		() => [
 			{ id: "scene" as const, label: t("settings.sections.scene", "Scene"), icon: Sparkle },
 			{ id: "cursor" as const, label: t("settings.sections.cursor", "Cursor"), icon: Cursor },
+			{
+				id: "highlights" as const,
+				label: t("settings.sections.highlights", "Highlighting"),
+				icon: Highlighter,
+			},
 			{
 				id: "keystrokes" as const,
 				label: t("settings.sections.keystrokes", "Keystrokes"),

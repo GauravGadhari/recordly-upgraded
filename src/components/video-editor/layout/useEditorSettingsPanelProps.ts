@@ -276,6 +276,21 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		onAnnotationBlurColorChange: annotationCommands.handleAnnotationBlurColorChange,
 		onAnnotationHighlightDataChange: annotationCommands.handleAnnotationHighlightDataChange,
 		onAnnotationDelete: annotationCommands.handleAnnotationDelete,
+		onAddHighlight: () => {
+			const start = Math.max(0, currentTime);
+			const videoDuration = input.duration > 0 ? input.duration : start + 4000;
+			const end = Math.min(start + 4000, videoDuration);
+			const nextTrack =
+				timeline.annotationRegions.length > 0
+					? Math.max(...timeline.annotationRegions.map((r) => r.trackIndex ?? 0)) + 1
+					: 0;
+			annotationCommands.handleAnnotationAdded(
+				{ start, end: end > start ? end : start + 3000 },
+				nextTrack,
+				"highlight",
+			);
+		},
+		onSelectAnnotation: (id: string | null) => timeline.setSelectedAnnotationId(id),
 		keystrokes: timeline.keystrokes,
 		keystrokeSettings: timeline.keystrokeSettings,
 		onKeystrokeSettingsChange: input.onKeystrokeSettingsChange ?? timeline.setKeystrokeSettings,
