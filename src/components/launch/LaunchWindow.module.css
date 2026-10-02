@@ -97,7 +97,7 @@
 
 .menuCard {
 	width: 300px;
-	max-height: 400px;
+	max-height: min(440px, calc(100vh - 100px));
 	overflow-y: auto;
 	background: var(--launch-surface);
 	border: 1px solid var(--launch-border);

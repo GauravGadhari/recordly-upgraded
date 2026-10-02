@@ -30,7 +30,7 @@ const WINDOW_ICON_PATH = path.join(
 let hudOverlayWindow: BrowserWindow | null = null;
 let hudOverlayHiddenFromCapture = true;
 let hudOverlayCaptureProtectionLoaded = false;
-let hudOverlayFallbackExpanded = false;
+let hudOverlayFallbackExpanded = true;
 let hudOverlayIgnoringMouse = true;
 let hudOverlaySourceSelectionActive = false;
 let hudOverlayMouseReassertTimer: NodeJS.Timeout | null = null;
@@ -312,9 +312,7 @@ function setHudOverlayMousePassthrough(ignore: boolean) {
 	}
 
 	if (!isHudOverlayMousePassthroughSupported()) {
-		if (process.platform !== "linux") {
-			setHudOverlayFallbackExpanded(!ignore);
-		}
+		setHudOverlayFallbackExpanded(!ignore);
 		hudOverlayWindow.setIgnoreMouseEvents(false);
 		return;
 	}
@@ -449,7 +447,7 @@ ipcMain.handle("set-hud-overlay-capture-protection", (_event, enabled: boolean) 
 export function createHudOverlayWindow(): BrowserWindow {
 	const perfStart = Date.now();
 	loadHudOverlayCaptureProtectionSetting();
-	hudOverlayFallbackExpanded = false;
+	hudOverlayFallbackExpanded = true;
 	hudOverlayWebcamPreviewVisible = false;
 	const initialBounds = getHudOverlayBounds();
 	let hasShownHudWindow = false;
@@ -682,7 +680,7 @@ export function reassertHudOverlayMousePassthrough(): void {
 
 export function setHudOverlayRecordingActive(recording: boolean): void {
 	hudOverlayRecordingActive = Boolean(recording);
-	hudOverlayFallbackExpanded = false;
+	hudOverlayFallbackExpanded = !hudOverlayRecordingActive;
 	applyHudOverlayBounds();
 	reassertHudOverlayCaptureProtection();
 	// Start in passthrough mode. Forwarded pointer movement lets the renderer

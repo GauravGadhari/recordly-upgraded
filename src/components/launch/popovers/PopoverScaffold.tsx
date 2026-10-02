@@ -88,7 +88,7 @@ export function HudPopover({
 				align={align}
 				sideOffset={8}
 				avoidCollisions
-				collisionPadding={10}
+				collisionPadding={12}
 				usePortal={false}
 				onMouseEnter={onMouseEnter}
 			>
