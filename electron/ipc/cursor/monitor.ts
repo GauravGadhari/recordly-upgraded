@@ -18,7 +18,7 @@ import {
 	setNativeCursorMonitorProcess,
 } from "../state";
 import type { CursorVisualType } from "../types";
-import { recordCursorMouseDown, recordCursorMouseUp } from "./interaction";
+import { recordCursorMouseDown, recordCursorMouseUp, recordCursorScroll } from "./interaction";
 import { recordKeyDown, recordKeyUp } from "./keystrokeTelemetry";
 import { isCursorCapturePaused, sampleCursorPoint } from "./telemetry";
 
@@ -56,6 +56,17 @@ export function handleCursorMonitorStdout(chunk: Buffer) {
 				const button = Number(interactionMatch[2]);
 				recordCursorMouseDown(button === 2 || button === 3 ? button : 1);
 			}
+			continue;
+		}
+
+		const scrollMatch = line.match(/^INTERACTION:scroll:(vertical|horizontal):(-?\d+)$/);
+		if (scrollMatch) {
+			const rotation = Number(scrollMatch[2]);
+			recordCursorScroll({
+				rotation,
+				direction: scrollMatch[1] === "vertical" ? 3 : 4,
+				amount: Math.abs(rotation),
+			});
 			continue;
 		}
 

@@ -1026,7 +1026,8 @@ interface CursorTelemetryPoint {
 		| "double-click"
 		| "right-click"
 		| "middle-click"
-		| "mouseup";
+		| "mouseup"
+		| "scroll";
 	cursorType?:
 		| "arrow"
 		| "text"
@@ -1037,6 +1038,7 @@ interface CursorTelemetryPoint {
 		| "resize-ew"
 		| "resize-ns"
 		| "not-allowed";
+	scrollDelta?: number;
 }
 
 interface SystemCursorAsset {

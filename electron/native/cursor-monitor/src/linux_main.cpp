@@ -20,6 +20,13 @@
 #include <libevdev/libevdev.h>
 #include <linux/input-event-codes.h>
 
+#ifndef REL_WHEEL_HI_RES
+#define REL_WHEEL_HI_RES 0x0b
+#endif
+#ifndef REL_HWHEEL_HI_RES
+#define REL_HWHEEL_HI_RES 0x0c
+#endif
+
 extern char** environ;
 
 static std::atomic<bool> g_running{true};
@@ -271,7 +278,29 @@ static void evdev_thread_func() {
                         g_last_activity_ms.store(now_ms());
 
                         if (ev.type == EV_REL || ev.type == EV_ABS) {
-                            // Activity is recorded
+                            // Emit scroll wheel events
+                            if (ev.type == EV_REL) {
+                                if (ev.code == REL_WHEEL || ev.code == REL_WHEEL_HI_RES) {
+                                    int delta = ev.value;
+                                    // REL_WHEEL_HI_RES reports 120 units per notch
+                                    if (ev.code == REL_WHEEL_HI_RES) {
+                                        delta = (ev.value > 0) ? 1 : (ev.value < 0) ? -1 : 0;
+                                    }
+                                    if (delta != 0) {
+                                        std::cout << "INTERACTION:scroll:vertical:" << delta << "\n";
+                                        std::cout.flush();
+                                    }
+                                } else if (ev.code == REL_HWHEEL || ev.code == REL_HWHEEL_HI_RES) {
+                                    int delta = ev.value;
+                                    if (ev.code == REL_HWHEEL_HI_RES) {
+                                        delta = (ev.value > 0) ? 1 : (ev.value < 0) ? -1 : 0;
+                                    }
+                                    if (delta != 0) {
+                                        std::cout << "INTERACTION:scroll:horizontal:" << delta << "\n";
+                                        std::cout.flush();
+                                    }
+                                }
+                            }
                         } else if (ev.type == EV_KEY) {
                             if (ev.code < 0x100) {
                                 if (ev.value == 1) {

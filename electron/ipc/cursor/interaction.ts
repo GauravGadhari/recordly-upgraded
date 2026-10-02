@@ -235,6 +235,33 @@ export function recordCursorMouseUp() {
 	pushCursorSample(point.cx, point.cy, getCursorCaptureElapsedMs(), "mouseup");
 }
 
+export function recordCursorScroll(event: {
+	rotation?: number;
+	direction?: number;
+	amount?: number;
+	data?: { rotation?: number; direction?: number; amount?: number };
+}) {
+	if (!isCursorCaptureActive || isCursorCapturePaused()) {
+		return;
+	}
+
+	const point = getNormalizedCursorPoint();
+	if (!point) {
+		return;
+	}
+
+	const rotation = event.rotation ?? event.data?.rotation ?? 0;
+	const amount = event.amount ?? event.data?.amount ?? 1;
+
+	// Normalize: rotation is typically -1 or 1 per notch; amount is clicks (usually 1-3)
+	// Horizontal scrolls (direction=4) use negative = left, positive = right
+	const rawDelta = rotation * Math.min(3, Math.abs(amount));
+	const normalizedDelta = Math.max(-1, Math.min(1, rawDelta / 3));
+
+	pushCursorSample(point.cx, point.cy, getCursorCaptureElapsedMs(), "scroll", undefined, normalizedDelta);
+}
+
+
 export async function startInteractionCapture() {
 	if (!isCursorCaptureActive) {
 		return;
@@ -311,10 +338,15 @@ export async function startInteractionCapture() {
 			}
 		};
 
+		const onWheel = (event: any) => {
+			recordCursorScroll(event);
+		};
+
 		hook.on("mousedown", onMouseDown);
 		hook.on("mouseup", onMouseUp);
 		hook.on("keydown", onKeyDown);
 		hook.on("keyup", onKeyUp);
+		hook.on("wheel", onWheel);
 		if (process.platform === "linux") {
 			hook.on("mousemove", onMouseMove);
 		}
@@ -326,6 +358,7 @@ export async function startInteractionCapture() {
 					hook.off("mouseup", onMouseUp);
 					hook.off("keydown", onKeyDown);
 					hook.off("keyup", onKeyUp);
+					hook.off("wheel", onWheel);
 					if (process.platform === "linux") {
 						hook.off("mousemove", onMouseMove);
 					}
@@ -334,6 +367,7 @@ export async function startInteractionCapture() {
 					hook.removeListener("mouseup", onMouseUp);
 					hook.removeListener("keydown", onKeyDown);
 					hook.removeListener("keyup", onKeyUp);
+					hook.removeListener("wheel", onWheel);
 					if (process.platform === "linux") {
 						hook.removeListener("mousemove", onMouseMove);
 					}

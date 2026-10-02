@@ -34,7 +34,9 @@ export interface CursorTelemetryPoint {
 		| "double-click"
 		| "right-click"
 		| "middle-click"
-		| "mouseup";
+		| "mouseup"
+		| "scroll";
+	scrollDelta?: number;
 	cursorType?:
 		| "arrow"
 		| "text"
@@ -67,6 +69,7 @@ export type {
 	ClickSfxStyle,
 	CursorSfxSettings,
 	DragSfxStyle,
+	ScrollSfxStyle,
 	WhooshSfxStyle,
 	WhooshTriggerMode,
 } from "./timeline/sfxSuggestionUtils";

@@ -96,7 +96,8 @@ export type CursorInteractionType =
 	| "double-click"
 	| "right-click"
 	| "middle-click"
-	| "mouseup";
+	| "mouseup"
+	| "scroll";
 
 export interface CursorTelemetryPoint {
 	timeMs: number;
@@ -104,6 +105,7 @@ export interface CursorTelemetryPoint {
 	cy: number;
 	interactionType?: CursorInteractionType;
 	cursorType?: CursorVisualType;
+	scrollDelta?: number;
 }
 
 export type NativeMacWindowSource = {
@@ -120,7 +122,7 @@ export type NativeMacWindowSource = {
 	height?: number;
 };
 
-export type HookEventName = "mousedown" | "mouseup" | "mousemove" | "keydown" | "keyup";
+export type HookEventName = "mousedown" | "mouseup" | "mousemove" | "keydown" | "keyup" | "wheel";
 
 export type HookMouseEvent = {
 	button?: number;

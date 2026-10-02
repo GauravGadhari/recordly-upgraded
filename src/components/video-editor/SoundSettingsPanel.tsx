@@ -194,7 +194,7 @@ export function SoundSettingsPanel({
 						<div className="flex items-center gap-1.5">
 							<Sparkle className="h-4 w-4 text-[#2563EB]" weight="fill" />
 							<span className="text-xs font-semibold text-foreground">
-								Auto Interaction, Keys & Zoom SFX
+								Auto Interaction, Keys, Scroll & Zoom SFX
 							</span>
 						</div>
 						<span className="text-[10px] text-muted-foreground">
@@ -202,7 +202,7 @@ export function SoundSettingsPanel({
 						</span>
 					</div>
 					<p className="text-[11px] text-muted-foreground leading-relaxed">
-						Automatically detect clicks, keystrokes, drags, whoosh sweeps, and zoom transitions to populate dedicated audio tracks.
+						Automatically detect clicks, mouse scrolling, keystrokes, drags, whoosh sweeps, and zoom transitions to populate dedicated audio tracks.
 					</p>
 					<div className="flex flex-wrap items-center gap-2 pt-0.5">
 						<Button

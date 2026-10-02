@@ -6,6 +6,7 @@ import {
 	detectCursorClicks,
 	detectCursorDrags,
 	detectCursorWhooshes,
+	detectScrollBursts,
 	generateAutoCursorSfxRegions,
 	generateKeystrokeSfxRegions,
 	getClickSfxAudioPath,
@@ -420,4 +421,53 @@ describe("sfxSuggestionUtils", () => {
 		expect(keyRegion?.trackIndex).toBe(3);
 		expect(keyRegion?.label).toBe("Key (Enter)");
 	});
+
+	it("detects scroll bursts from consecutive scroll events within minGapMs", () => {
+		const samples: CursorTelemetryPoint[] = [
+			{ timeMs: 100, cx: 0.5, cy: 0.5, interactionType: "scroll", scrollDelta: -0.33 },
+			{ timeMs: 140, cx: 0.5, cy: 0.5, interactionType: "scroll", scrollDelta: -0.33 },
+			{ timeMs: 180, cx: 0.5, cy: 0.5, interactionType: "scroll", scrollDelta: -0.33 },
+			// Gap of 320ms -> new burst
+			{ timeMs: 500, cx: 0.6, cy: 0.6, interactionType: "scroll", scrollDelta: 0.66 },
+			{ timeMs: 550, cx: 0.6, cy: 0.6, interactionType: "scroll", scrollDelta: 0.66 },
+		];
+
+		const bursts = detectScrollBursts(samples, 80);
+		expect(bursts).toHaveLength(2);
+
+		expect(bursts[0].startMs).toBe(100);
+		expect(bursts[0].endMs).toBe(180);
+		expect(bursts[0].tickCount).toBe(3);
+		expect(bursts[0].avgDelta).toBeCloseTo(-0.33, 2);
+
+		expect(bursts[1].startMs).toBe(500);
+		expect(bursts[1].endMs).toBe(550);
+		expect(bursts[1].tickCount).toBe(2);
+		expect(bursts[1].avgDelta).toBeCloseTo(0.66, 2);
+	});
+
+	it("integrates scroll ticks into generateAutoCursorSfxRegions on Track 4", () => {
+		const samples: CursorTelemetryPoint[] = [
+			{ timeMs: 100, cx: 0.5, cy: 0.5, interactionType: "click" },
+			{ timeMs: 300, cx: 0.5, cy: 0.5, interactionType: "scroll", scrollDelta: -0.33 },
+			{ timeMs: 350, cx: 0.5, cy: 0.5, interactionType: "scroll", scrollDelta: -0.33 },
+		];
+
+		const regions = generateAutoCursorSfxRegions({
+			telemetry: samples,
+			durationMs: 2000,
+		});
+
+		const clickRegion = regions.find((r) => r.label === "Click");
+		const scrollRegions = regions.filter((r) => r.label === "Scroll");
+
+		expect(clickRegion).toBeDefined();
+		expect(clickRegion?.trackIndex).toBe(0);
+
+		expect(scrollRegions.length).toBeGreaterThanOrEqual(1);
+		expect(scrollRegions[0].trackIndex).toBe(4);
+		expect(scrollRegions[0].category).toBe("Cursor SFX");
+		expect(scrollRegions[0].audioPath).toMatch(/^data:audio\/wav;base64,/);
+	});
 });
+

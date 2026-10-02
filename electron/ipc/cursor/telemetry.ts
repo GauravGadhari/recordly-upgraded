@@ -60,7 +60,8 @@ export function normalizeCursorTelemetrySamples(rawSamples: unknown): CursorTele
 					point.interactionType === "right-click" ||
 					point.interactionType === "middle-click" ||
 					point.interactionType === "move" ||
-					point.interactionType === "mouseup"
+					point.interactionType === "mouseup" ||
+					point.interactionType === "scroll"
 						? point.interactionType
 						: undefined,
 				cursorType:
@@ -74,6 +75,10 @@ export function normalizeCursorTelemetrySamples(rawSamples: unknown): CursorTele
 					point.cursorType === "resize-ns" ||
 					point.cursorType === "not-allowed"
 						? point.cursorType
+						: undefined,
+				scrollDelta:
+					typeof point.scrollDelta === "number" && Number.isFinite(point.scrollDelta)
+						? Math.max(-1, Math.min(1, point.scrollDelta))
 						: undefined,
 			};
 		})
@@ -249,6 +254,7 @@ export function pushCursorSample(
 	timeMs: number,
 	interactionType: CursorInteractionType = "move",
 	cursorType?: CursorVisualType,
+	scrollDelta?: number,
 ) {
 	const last = activeCursorSamples[activeCursorSamples.length - 1];
 	if (
@@ -257,7 +263,8 @@ export function pushCursorSample(
 		last.interactionType === interactionType &&
 		last.cursorType === (cursorType ?? currentCursorVisualType) &&
 		Math.abs(last.cx - cx) < 0.0001 &&
-		Math.abs(last.cy - cy) < 0.0001
+		Math.abs(last.cy - cy) < 0.0001 &&
+		last.scrollDelta === scrollDelta
 	) {
 		return;
 	}
@@ -268,6 +275,7 @@ export function pushCursorSample(
 		cy,
 		interactionType,
 		cursorType: cursorType ?? currentCursorVisualType,
+		...(scrollDelta !== undefined ? { scrollDelta } : {}),
 	} as CursorTelemetryPoint);
 
 	if (activeCursorSamples.length > MAX_CURSOR_SAMPLES) {

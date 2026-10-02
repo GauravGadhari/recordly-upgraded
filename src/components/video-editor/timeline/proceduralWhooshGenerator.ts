@@ -631,3 +631,110 @@ export function synthesizeKeystrokeClickWav(
 	return { dataUrl, durationMs };
 }
 
+export type ScrollSfxStyle = "ratchet" | "smooth" | "notch";
+
+export interface ProceduralScrollOptions {
+	sampleRate?: number;
+	style?: ScrollSfxStyle;
+	volume?: number;
+	pan?: number;
+	intensity?: number; // 0-1, maps to scroll speed/amount
+	durationMs?: number;
+}
+
+/**
+ * Procedurally synthesizes a mouse wheel scroll tick WAV.
+ * Models the physical ratchet mechanism of a scroll wheel:
+ * - Detent click from the notch spring
+ * - Plastic housing resonance
+ * - Wheel inertia micro-rattle
+ */
+export function synthesizeScrollTickWav(
+	options: ProceduralScrollOptions = {},
+): GeneratedWhoosh {
+	const sampleRate = options.sampleRate ?? 44100;
+	const style = options.style ?? "ratchet";
+	const volume = options.volume ?? 1.0;
+	const intensity = Math.max(0, Math.min(1, options.intensity ?? 0.5));
+
+	const defaultDur = style === "smooth" ? 65 : style === "notch" ? 38 : 45;
+	const durationMs = options.durationMs ?? defaultDur;
+	const durationSec = durationMs / 1000;
+	const numSamples = Math.round(durationSec * sampleRate);
+
+	const samplesL = new Float32Array(numSamples);
+	const samplesR = new Float32Array(numSamples);
+
+	// Micro-pitch variance for natural scroll cadence
+	const microPitch = 1.0 + (Math.random() - 0.5) * 0.08;
+
+	// Acoustic parameters per style
+	let detentFreq: number;
+	let housingFreq: number;
+	let rattleFreq: number;
+	let detentDecay: number;
+	let housingDecay: number;
+	let rattleDecay: number;
+
+	if (style === "smooth") {
+		// Smooth encoder / trackpad feel
+		detentFreq = 2800 * microPitch;
+		housingFreq = 900 * microPitch;
+		rattleFreq = 4200 * microPitch;
+		detentDecay = 0.0008;
+		housingDecay = 0.003;
+		rattleDecay = 0.0005;
+	} else if (style === "notch") {
+		// Crisp, precise notch (Logitech MX-style)
+		detentFreq = 4800 * microPitch;
+		housingFreq = 1400 * microPitch;
+		rattleFreq = 6200 * microPitch;
+		detentDecay = 0.0006;
+		housingDecay = 0.0018;
+		rattleDecay = 0.0004;
+	} else {
+		// Default ratchet (standard mechanical scroll)
+		detentFreq = 3600 * microPitch;
+		housingFreq = 1100 * microPitch;
+		rattleFreq = 5400 * microPitch;
+		detentDecay = 0.0007;
+		housingDecay = 0.0025;
+		rattleDecay = 0.0005;
+	}
+
+	// Intensity modulates amplitude and adds a subtle pitch shift
+	const intensityGain = 0.6 + intensity * 0.4;
+	detentFreq *= 1.0 + intensity * 0.1;
+
+	const pan = Math.max(-0.85, Math.min(0.85, options.pan ?? 0));
+	const leftGain = Math.cos(((pan + 1) * Math.PI) / 4);
+	const rightGain = Math.sin(((pan + 1) * Math.PI) / 4);
+
+	for (let n = 0; n < numSamples; n++) {
+		const t = n / sampleRate;
+
+		// 1. Detent spring click
+		const detentEnv = Math.exp(-t / detentDecay);
+		const detent = Math.sin(2 * Math.PI * detentFreq * t) * detentEnv * 0.7;
+
+		// 2. Initial contact burst (micro-friction)
+		const contactNoise = (Math.random() * 2 - 1) * Math.exp(-t / 0.0006) * 0.2;
+
+		// 3. Housing plastic resonance
+		const housingEnv = Math.exp(-t / housingDecay);
+		const housing = Math.sin(2 * Math.PI * housingFreq * t) * housingEnv * 0.35;
+
+		// 4. Wheel rattle overtone
+		const rattleEnv = Math.exp(-t / rattleDecay);
+		const rattle = Math.sin(2 * Math.PI * rattleFreq * t) * rattleEnv * 0.15;
+
+		const rawSignal = (detent + contactNoise + housing + rattle) * volume * intensityGain * 1.4;
+		const saturated = rawSignal / (1 + Math.abs(rawSignal) * 0.6);
+
+		samplesL[n] = saturated * leftGain;
+		samplesR[n] = saturated * rightGain;
+	}
+
+	const dataUrl = encodeWavDataUrl(samplesL, samplesR, sampleRate);
+	return { dataUrl, durationMs };
+}

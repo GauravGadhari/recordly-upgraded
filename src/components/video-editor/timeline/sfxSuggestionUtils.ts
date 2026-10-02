@@ -2,12 +2,16 @@ import type { AudioRegion, CursorTelemetryPoint, KeystrokeEvent, ZoomRegion } fr
 import { detectInteractionCandidates } from "./zoomSuggestionUtils";
 import {
 	type ProceduralKeystrokeStyle,
+	type ScrollSfxStyle,
 	synthesizeCursorClickWav,
 	synthesizeCursorDragWav,
 	synthesizeCursorWhooshWav,
 	synthesizeKeystrokeClickWav,
+	synthesizeScrollTickWav,
 	synthesizeZoomWhooshWav,
 } from "./proceduralWhooshGenerator";
+
+export type { ScrollSfxStyle };
 
 export type ClickSfxStyle = "procedural" | "crisp" | "soft" | "digital" | "mechanical";
 export type DragSfxStyle = "procedural" | "mouse" | "slide";
@@ -33,6 +37,9 @@ export interface CursorSfxSettings {
 	keystrokeVolume?: number;
 	keystrokeStyle?: KeystrokeSfxStyle;
 	keystrokeShortcutsOnly?: boolean;
+	scrollEnabled?: boolean;
+	scrollVolume?: number;
+	scrollStyle?: ScrollSfxStyle;
 }
 
 export const DEFAULT_CURSOR_SFX_SETTINGS: CursorSfxSettings = {
@@ -53,6 +60,9 @@ export const DEFAULT_CURSOR_SFX_SETTINGS: CursorSfxSettings = {
 	keystrokeVolume: 0.65,
 	keystrokeStyle: "mechanical",
 	keystrokeShortcutsOnly: false,
+	scrollEnabled: true,
+	scrollVolume: 0.5,
+	scrollStyle: "ratchet",
 };
 
 export const SFX_DURATIONS_MS: Record<string, number> = {
@@ -606,6 +616,73 @@ export function generateKeystrokeSfxRegions(input: {
 	return regions;
 }
 
+export interface ScrollBurst {
+	startMs: number;
+	endMs: number;
+	tickCount: number;
+	avgDelta: number;
+	cx: number;
+	cy: number;
+}
+
+/**
+ * Detects scroll event bursts from cursor telemetry.
+ * Groups consecutive scroll samples within 200ms into bursts and emits one
+ * SFX tick per scroll notch within each burst.
+ */
+export function detectScrollBursts(
+	samples: CursorTelemetryPoint[],
+	minGapMs = 80,
+): ScrollBurst[] {
+	const scrollSamples = samples.filter((s) => s.interactionType === "scroll");
+	if (scrollSamples.length === 0) return [];
+
+	const bursts: ScrollBurst[] = [];
+	let burstStart = scrollSamples[0];
+	let burstEnd = scrollSamples[0];
+	let tickCount = 1;
+	let deltaSum = burstStart.scrollDelta ?? 0;
+	let cxSum = burstStart.cx;
+	let cySum = burstStart.cy;
+
+	for (let i = 1; i < scrollSamples.length; i++) {
+		const s = scrollSamples[i];
+		if (s.timeMs - burstEnd.timeMs <= minGapMs) {
+			burstEnd = s;
+			tickCount++;
+			deltaSum += s.scrollDelta ?? 0;
+			cxSum += s.cx;
+			cySum += s.cy;
+		} else {
+			bursts.push({
+				startMs: Math.round(burstStart.timeMs),
+				endMs: Math.round(burstEnd.timeMs),
+				tickCount,
+				avgDelta: deltaSum / tickCount,
+				cx: cxSum / tickCount,
+				cy: cySum / tickCount,
+			});
+			burstStart = s;
+			burstEnd = s;
+			tickCount = 1;
+			deltaSum = s.scrollDelta ?? 0;
+			cxSum = s.cx;
+			cySum = s.cy;
+		}
+	}
+
+	bursts.push({
+		startMs: Math.round(burstStart.timeMs),
+		endMs: Math.round(burstEnd.timeMs),
+		tickCount,
+		avgDelta: deltaSum / tickCount,
+		cx: cxSum / tickCount,
+		cy: cySum / tickCount,
+	});
+
+	return bursts;
+}
+
 export interface AutoSfxGenerationOptions {
 	settings?: Partial<CursorSfxSettings>;
 	types?: {
@@ -614,6 +691,7 @@ export interface AutoSfxGenerationOptions {
 		whooshes?: boolean;
 		zooms?: boolean;
 		keystrokes?: boolean;
+		scrolls?: boolean;
 	};
 }
 
@@ -841,6 +919,53 @@ export function generateAutoCursorSfxRegions(input: {
 			trackIndex: 3,
 		});
 		regions.push(...keyRegions);
+	}
+
+	// 5. Scroll ticks (Track 4)
+	const includeScrolls =
+		options.types?.scrolls ??
+		(options.settings?.scrollEnabled !== undefined
+			? options.settings.scrollEnabled
+			: Boolean(settings.scrollEnabled));
+
+	if (includeScrolls && telemetry.length > 0) {
+		const scrollVolume = options.settings?.scrollVolume ?? settings.scrollVolume ?? 0.5;
+		const scrollStyle = options.settings?.scrollStyle ?? settings.scrollStyle ?? "ratchet";
+
+		const scrollBursts = detectScrollBursts(telemetry);
+
+		for (const burst of scrollBursts) {
+			if (burst.startMs >= durationMs) continue;
+
+			// Generate individual tick sounds for each scroll notch in the burst
+			const tickSpacing = burst.tickCount > 1
+				? Math.max(35, (burst.endMs - burst.startMs) / burst.tickCount)
+				: 0;
+
+			for (let tick = 0; tick < burst.tickCount; tick++) {
+				const tickMs = Math.round(burst.startMs + tick * tickSpacing);
+				if (tickMs >= durationMs) break;
+
+				const synth = synthesizeScrollTickWav({
+					style: scrollStyle,
+					volume: 1.0,
+					pan: (burst.cx - 0.5) * 1.2,
+					intensity: Math.min(1, Math.abs(burst.avgDelta)),
+				});
+
+				const endMs = Math.min(durationMs, tickMs + synth.durationMs);
+				regions.push({
+					id: `sfx-scroll-${tickMs}-${idCounter++}`,
+					startMs: tickMs,
+					endMs,
+					audioPath: synth.dataUrl,
+					volume: scrollVolume,
+					trackIndex: 4,
+					label: "Scroll",
+					category: "Cursor SFX",
+				});
+			}
+		}
 	}
 
 	// Sort chronologically
