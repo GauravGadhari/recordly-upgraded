@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { app } from "electron";
 
 const nodeRequire = createRequire(import.meta.url);
@@ -116,6 +117,31 @@ export function resolveSystemFfprobeBinaryPath(): string | null {
 	return null;
 }
 
+/**
+ * Resolve a platform-specific FFmpeg binary bundled alongside our other native
+ * helpers in electron/native/bin/{archTag}/. This is needed when cross-building
+ * (e.g. building a Windows package on Linux) because ffmpeg-static only
+ * downloads the binary for the build host platform.
+ */
+function resolveBundledNativeFfmpeg(): string | null {
+	const archTag =
+		process.platform === "win32"
+			? `win32-${process.arch === "arm64" ? "arm64" : "x64"}`
+			: process.platform === "darwin"
+				? `darwin-${process.arch === "arm64" ? "arm64" : "x64"}`
+				: `linux-${process.arch === "arm64" ? "arm64" : "x64"}`;
+	const exeName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+	const base = app.getAppPath();
+	const resolved = path.join(base, "electron", "native", "bin", archTag, exeName);
+	const candidate = app.isPackaged
+		? resolved.replace(/\.asar([/\\])/, ".asar.unpacked$1")
+		: resolved;
+	if (existsSync(candidate)) {
+		return candidate;
+	}
+	return null;
+}
+
 export function getFfmpegBinaryPath(): string {
 	const ffmpegStatic = loadFfmpegStatic();
 	if (ffmpegStatic && typeof ffmpegStatic === "string") {
@@ -126,6 +152,12 @@ export function getFfmpegBinaryPath(): string {
 		if (existsSync(bundledPath)) {
 			return bundledPath;
 		}
+	}
+
+	// Fallback: platform-specific ffmpeg bundled in electron/native/bin/{archTag}/
+	const nativeFfmpeg = resolveBundledNativeFfmpeg();
+	if (nativeFfmpeg) {
+		return nativeFfmpeg;
 	}
 
 	const systemFfmpeg = resolveSystemFfmpegBinaryPath();
