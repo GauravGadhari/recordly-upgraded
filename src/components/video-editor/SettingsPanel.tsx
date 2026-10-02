@@ -2,6 +2,8 @@ import {
 	CursorClick,
 	Palette,
 	PresentationChart,
+	Sparkle,
+	SpeakerHigh,
 	Trash as Trash2,
 	UploadSimple as Upload,
 	X,
@@ -36,6 +38,10 @@ import { SUPPORTED_LOCALES } from "../../i18n/config";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import CaptionListPanel from "./CaptionListPanel";
 import type { CaptionRetimeSpan } from "./captionOps";
+import KeystrokeSettingsPanel from "./KeystrokeSettingsPanel";
+import { MemeSettingsPanel } from "./MemeSettingsPanel";
+import type { MediaLibraryPanelProps } from "./mediaLibrary/mediaLibraryTypes";
+import { SoundSettingsPanel } from "./SoundSettingsPanel";
 import {
 	CURSOR_MOTION_PRESETS,
 	type CursorMotionPresetId,
@@ -51,14 +57,21 @@ import type {
 	AutoCaptionAnimation,
 	AutoCaptionSettings,
 	CaptionCue,
+	ClickSfxStyle,
 	CropRegion,
 	CursorClickEffectStyle,
+	CursorSfxSettings,
 	CursorStyle,
 	EditorEffectSection,
 	FigureData,
+	HighlightData,
+	KeystrokeEvent,
+	KeystrokeVisualSettings,
 	Padding,
 	WebcamOverlaySettings,
 	WebcamPositionPreset,
+	WhooshSfxStyle,
+	WhooshTriggerMode,
 	ZoomDepth,
 	ZoomMode,
 	ZoomTransitionEasing,
@@ -69,14 +82,19 @@ import {
 	DEFAULT_CROP_REGION,
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+	DEFAULT_CURSOR_CLICK_DEPTH,
+	MIN_CURSOR_CLICK_DEPTH,
+	MAX_CURSOR_CLICK_DEPTH,
 	DEFAULT_CURSOR_CLICK_EFFECT,
 	DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
 	DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
 	DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
+	DEFAULT_CURSOR_SFX_SETTINGS,
 	DEFAULT_CURSOR_SIZE,
 	DEFAULT_CURSOR_STYLE,
 	DEFAULT_CURSOR_SWAY,
+	DEFAULT_KEYSTROKE_SETTINGS,
 	DEFAULT_PADDING,
 	DEFAULT_WEBCAM_MARGIN,
 	DEFAULT_WEBCAM_POSITION_PRESET,
@@ -89,6 +107,7 @@ import {
 	DEFAULT_ZOOM_IN_DURATION_MS,
 	DEFAULT_ZOOM_OUT_DURATION_MS,
 } from "./types";
+import { getClickSfxAudioPath } from "./timeline/sfxSuggestionUtils";
 import { fromCursorSwaySliderValue, toCursorSwaySliderValue } from "./videoPlayback/cursorSway";
 import { isZeroPadding } from "./videoPlayback/layoutUtils";
 import { supportsPreviewPlaybackRate } from "./videoPlayback/playbackRate";
@@ -264,6 +283,11 @@ const CURSOR_CLICK_EFFECT_OPTIONS: Array<{
 		label: "Echo",
 		description: "A pair of soft rings that spread outward with a cleaner pulse.",
 	},
+	{
+		id: "depth",
+		label: "Depth",
+		description: "A tactile press that makes the cursor feel physically pushed into the surface.",
+	},
 ];
 
 function MotionPresetCards({
@@ -375,10 +399,26 @@ function CursorClickEffectPreview({
 						cx="24"
 						cy="24"
 						r="13"
+						fill="currentColor"
+						opacity="0.25"
+					/>
+					<circle
+						cx="24"
+						cy="24"
+						r="13"
 						fill="none"
 						stroke="currentColor"
 						strokeWidth="2"
-						opacity="0.72"
+						opacity="0.85"
+					/>
+					<circle
+						cx="24"
+						cy="24"
+						r="7"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.2"
+						opacity="0.45"
 					/>
 				</svg>
 			) : null}
@@ -414,6 +454,47 @@ function CursorClickEffectPreview({
 							stroke="none"
 						/>
 					</g>
+				</svg>
+			) : null}
+			{effect === "depth" ? (
+				<svg
+					className="absolute h-12 w-12"
+					style={{ color: hexToRgba(color, 0.92) }}
+					viewBox="0 0 48 48"
+					aria-hidden="true"
+				>
+					<circle
+						cx="24"
+						cy="24"
+						r="14"
+						fill="currentColor"
+						opacity="0.30"
+					/>
+					<circle
+						cx="24"
+						cy="24"
+						r="14"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2.2"
+						opacity="0.9"
+					/>
+					<circle
+						cx="24"
+						cy="24"
+						r="8"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.4"
+						opacity="0.5"
+					/>
+					<circle
+						cx="24"
+						cy="24"
+						r="4"
+						fill="#000000"
+						opacity="0.35"
+					/>
 				</svg>
 			) : null}
 		</div>
@@ -469,7 +550,7 @@ function CursorClickEffectCards({
 						onApply(value as CursorClickEffectStyle);
 					}
 				}}
-				className="grid grid-cols-4 gap-2"
+				className="grid grid-cols-5 gap-2"
 				aria-label={title}
 			>
 				{CURSOR_CLICK_EFFECT_OPTIONS.map((effect) => {
@@ -601,8 +682,20 @@ interface SettingsPanelProps {
 	onCursorClickBounceChange?: (amount: number) => void;
 	cursorClickBounceDuration?: number;
 	onCursorClickBounceDurationChange?: (duration: number) => void;
+	cursorClickDepth?: number;
+	onCursorClickDepthChange?: (depth: number) => void;
 	cursorSway?: number;
 	onCursorSwayChange?: (amount: number) => void;
+	cursorSfx?: CursorSfxSettings;
+	onCursorSfxChange?: (settings: CursorSfxSettings) => void;
+	onGenerateCursorSfx?: (options?: import("./timeline/sfxSuggestionUtils").AutoSfxGenerationOptions) => number;
+	onClearCursorSfx?: () => void;
+	onGenerateKeystrokeSfx?: (options?: {
+		style?: import("./timeline/sfxSuggestionUtils").KeystrokeSfxStyle;
+		volume?: number;
+		shortcutsOnly?: boolean;
+	}) => number;
+	onClearKeystrokeSfx?: () => void;
 	borderRadius?: number;
 	onBorderRadiusChange?: (radius: number) => void;
 	webcam?: WebcamOverlaySettings;
@@ -626,9 +719,17 @@ interface SettingsPanelProps {
 	onAnnotationFigureDataChange?: (id: string, figureData: FigureData) => void;
 	onAnnotationBlurIntensityChange?: (id: string, intensity: number) => void;
 	onAnnotationBlurColorChange?: (id: string, color: string) => void;
+	onAnnotationHighlightDataChange?: (id: string, highlightData: HighlightData) => void;
 	onAnnotationDelete?: (id: string) => void;
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
+	keystrokes?: KeystrokeEvent[];
+	keystrokeSettings?: KeystrokeVisualSettings;
+	onKeystrokeSettingsChange?: (settings: KeystrokeVisualSettings) => void;
+	onUpdateKeystroke?: (id: string, updates: Partial<KeystrokeEvent>) => void;
+	onDeleteKeystroke?: (id: string) => void;
+	onToggleKeystrokeEnabled?: (id: string) => void;
+	onSeekToTime?: (timeMs: number) => void;
 	whisperExecutablePath?: string | null;
 	whisperModelPath?: string | null;
 	whisperModelDownloadStatus?: "idle" | "downloading" | "downloaded" | "error";
@@ -651,6 +752,7 @@ interface SettingsPanelProps {
 	onCaptionDelete?: (id: string) => void;
 	nativeCaptureUnavailableSession?: boolean;
 	onOpenNativeCaptureUnavailableModal?: () => void;
+	mediaLibrary?: MediaLibraryPanelProps;
 }
 
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
@@ -1049,8 +1151,16 @@ export function SettingsPanel({
 	onCursorClickBounceChange,
 	cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	onCursorClickBounceDurationChange,
+	cursorClickDepth = DEFAULT_CURSOR_CLICK_DEPTH,
+	onCursorClickDepthChange,
 	cursorSway = DEFAULT_CURSOR_SWAY,
 	onCursorSwayChange,
+	cursorSfx = DEFAULT_CURSOR_SFX_SETTINGS,
+	onCursorSfxChange,
+	onGenerateCursorSfx,
+	onClearCursorSfx,
+	onGenerateKeystrokeSfx,
+	onClearKeystrokeSfx,
 	borderRadius = getDefaultBorderRadiusPercent(),
 	onBorderRadiusChange,
 	webcam,
@@ -1074,9 +1184,17 @@ export function SettingsPanel({
 	onAnnotationFigureDataChange,
 	onAnnotationBlurIntensityChange,
 	onAnnotationBlurColorChange,
+	onAnnotationHighlightDataChange,
 	onAnnotationDelete,
 	autoCaptions = [],
 	autoCaptionSettings = DEFAULT_AUTO_CAPTION_SETTINGS,
+	keystrokes = [],
+	keystrokeSettings = DEFAULT_KEYSTROKE_SETTINGS,
+	onKeystrokeSettingsChange,
+	onUpdateKeystroke,
+	onDeleteKeystroke,
+	onToggleKeystrokeEnabled,
+	onSeekToTime,
 	whisperModelPath,
 	whisperModelDownloadStatus = "idle",
 	whisperModelDownloadProgress = 0,
@@ -1097,12 +1215,14 @@ export function SettingsPanel({
 	onCaptionDelete,
 	nativeCaptureUnavailableSession = false,
 	onOpenNativeCaptureUnavailableModal,
+	mediaLibrary,
 }: SettingsPanelProps) {
 	const tSettings = useScopedT("settings");
 	const { locale, setLocale, t } = useI18n();
 	const { preference: themePreference, setPreference: setThemePreference } = useTheme();
 	const isBackgroundPanel = panelMode === "background";
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
+	const selectedTransitionId = mediaLibrary?.selectedTransitionId ?? null;
 	const [builtInWallpapers, setBuiltInWallpapers] =
 		useState<BuiltInWallpaper[]>(BUILT_IN_WALLPAPERS);
 	const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
@@ -1584,6 +1704,7 @@ export function SettingsPanel({
 		onCursorClickEffectDurationMsChange?.(initialEditorPreferences.cursorClickEffectDurationMs);
 		onCursorClickBounceChange?.(initialEditorPreferences.cursorClickBounce);
 		onCursorClickBounceDurationChange?.(initialEditorPreferences.cursorClickBounceDuration);
+		onCursorClickDepthChange?.(initialEditorPreferences.cursorClickDepth);
 		onCursorSwayChange?.(initialEditorPreferences.cursorSway);
 	};
 
@@ -2056,6 +2177,15 @@ export function SettingsPanel({
 				onBlurColorChange={
 					onAnnotationBlurColorChange
 						? (color) => onAnnotationBlurColorChange(selectedAnnotation.id, color)
+						: undefined
+				}
+				onHighlightDataChange={
+					onAnnotationHighlightDataChange
+						? (highlightData) =>
+								onAnnotationHighlightDataChange(
+									selectedAnnotation.id,
+									highlightData,
+								)
 						: undefined
 				}
 				onDelete={() => onAnnotationDelete(selectedAnnotation.id)}
@@ -3229,6 +3359,34 @@ export function SettingsPanel({
 				return captionsSectionContent;
 			case "caption":
 				return captionSectionContent;
+			case "sounds":
+				return mediaLibrary ? (
+					<SoundSettingsPanel
+						onAddSound={mediaLibrary.onAddSound}
+						onGenerateCursorSfx={mediaLibrary.onGenerateCursorSfx ?? onGenerateCursorSfx}
+						onClearCursorSfx={mediaLibrary.onClearCursorSfx ?? onClearCursorSfx}
+						onGenerateKeystrokeSfx={mediaLibrary.onGenerateKeystrokeSfx ?? onGenerateKeystrokeSfx}
+					/>
+				) : null;
+			case "memes":
+				return mediaLibrary ? <MemeSettingsPanel {...mediaLibrary} /> : null;
+			case "keystrokes":
+				return (
+					<KeystrokeSettingsPanel
+						settings={keystrokeSettings ?? DEFAULT_KEYSTROKE_SETTINGS}
+						onSettingsChange={onKeystrokeSettingsChange ?? (() => {})}
+						keystrokes={keystrokes}
+						onUpdateKeystroke={onUpdateKeystroke}
+						onDeleteKeystroke={onDeleteKeystroke}
+						onToggleKeystrokeEnabled={onToggleKeystrokeEnabled}
+						onSeekToTime={onSeekToTime}
+						onResetSettings={() =>
+							onKeystrokeSettingsChange?.({ ...DEFAULT_KEYSTROKE_SETTINGS })
+						}
+						onGenerateKeystrokeSfx={mediaLibrary?.onGenerateKeystrokeSfx ?? onGenerateKeystrokeSfx}
+						onClearKeystrokeSfx={mediaLibrary?.onClearKeystrokeSfx ?? onClearKeystrokeSfx}
+					/>
+				);
 			case "cursor":
 				return (
 					<section className="flex flex-col gap-2">
@@ -3457,6 +3615,23 @@ export function SettingsPanel({
 								parseInput={(text) => parseFloat(text.replace(/ms$/i, "").trim())}
 							/>
 							<SliderControl
+								label={tSettings("effects.cursorClickDepth", "Click Depth")}
+								value={cursorClickDepth}
+								defaultValue={DEFAULT_CURSOR_CLICK_DEPTH}
+								min={MIN_CURSOR_CLICK_DEPTH}
+								max={MAX_CURSOR_CLICK_DEPTH}
+								step={0.05}
+								onChange={(v) => onCursorClickDepthChange?.(v)}
+								formatValue={(v) =>
+									v <= 0 ? tSettings("effects.off") : `${v.toFixed(2)}×`
+								}
+								parseInput={(text) => {
+									const normalized = text.trim().toLowerCase();
+									if (normalized === "off") return 0;
+									return parseFloat(text.replace(/×$/, ""));
+								}}
+							/>
+							<SliderControl
 								label={tSettings("effects.cursorSway")}
 								value={toCursorSwaySliderValue(cursorSway)}
 								defaultValue={toCursorSwaySliderValue(DEFAULT_CURSOR_SWAY)}
@@ -3473,6 +3648,247 @@ export function SettingsPanel({
 									return parseFloat(text.replace(/×$/, ""));
 								}}
 							/>
+
+							<div className="mt-2 rounded-xl border border-foreground/10 bg-foreground/[0.02] p-3 backdrop-blur-sm flex flex-col gap-2.5">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-1.5">
+										<SpeakerHigh className="h-4 w-4 text-[#2563EB]" weight="fill" />
+										<span className="text-xs font-semibold text-foreground">
+											{tSettings("effects.cursorSfx.title", "Cursor Sound Effects")}
+										</span>
+									</div>
+									<Switch
+										checked={cursorSfx?.enabled ?? true}
+										onCheckedChange={(checked) =>
+											onCursorSfxChange?.({
+												...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+												enabled: checked,
+											})
+										}
+										className="data-[state=checked]:bg-[#2563EB] scale-75"
+									/>
+								</div>
+
+								{(cursorSfx?.enabled ?? true) ? (
+									<div className="flex flex-col gap-2.5 pt-1">
+										{/* Click SFX */}
+										<div className="flex flex-col gap-1.5 rounded-lg border border-foreground/5 bg-foreground/[0.02] p-2">
+											<div className="flex items-center justify-between">
+												<span className="text-[11px] font-medium text-foreground">
+													{tSettings("effects.cursorSfx.click", "Click Sound")}
+												</span>
+												<Switch
+													checked={cursorSfx?.clickEnabled ?? true}
+													onCheckedChange={(checked) =>
+														onCursorSfxChange?.({
+															...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+															clickEnabled: checked,
+														})
+													}
+													className="data-[state=checked]:bg-[#2563EB] scale-75"
+												/>
+											</div>
+											{(cursorSfx?.clickEnabled ?? true) ? (
+												<div className="flex flex-col gap-1.5 pt-1">
+													<div className="flex items-center justify-between gap-2">
+														<span className="text-[10px] text-muted-foreground">Style</span>
+														<Select
+															value={cursorSfx?.clickStyle ?? "crisp"}
+															onValueChange={(val) => {
+																const style = val as ClickSfxStyle;
+																onCursorSfxChange?.({
+																	...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																	clickStyle: style,
+																});
+																if (style !== "procedural") {
+																	try {
+																		const audio = new Audio(getClickSfxAudioPath(style));
+																		audio.volume = cursorSfx?.clickVolume ?? 0.7;
+																		void audio.play().catch(() => {});
+																	} catch {}
+																}
+															}}
+														>
+															<SelectTrigger className="h-6 w-32 text-[10px] bg-editor-bg border-foreground/10">
+																<SelectValue />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="crisp">Crisp Click</SelectItem>
+																<SelectItem value="soft">Soft Click</SelectItem>
+																<SelectItem value="digital">Digital Click</SelectItem>
+																<SelectItem value="procedural">Procedural Click</SelectItem>
+															</SelectContent>
+														</Select>
+													</div>
+													<SliderControl
+														label={tSettings("effects.cursorSfx.volume", "Volume")}
+														value={cursorSfx?.clickVolume ?? 0.7}
+														defaultValue={0.7}
+														min={0}
+														max={1}
+														step={0.05}
+														onChange={(v) =>
+															onCursorSfxChange?.({
+																...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																clickVolume: v,
+															})
+														}
+														formatValue={(v) => `${Math.round(v * 100)}%`}
+														parseInput={(t) => parseFloat(t.replace(/%$/, "")) / 100}
+													/>
+												</div>
+											) : null}
+										</div>
+
+										{/* Drag SFX */}
+										<div className="flex flex-col gap-1.5 rounded-lg border border-foreground/5 bg-foreground/[0.02] p-2">
+											<div className="flex items-center justify-between">
+												<span className="text-[11px] font-medium text-foreground">
+													{tSettings("effects.cursorSfx.drag", "Drag Sound")}
+												</span>
+												<Switch
+													checked={cursorSfx?.dragEnabled ?? true}
+													onCheckedChange={(checked) =>
+														onCursorSfxChange?.({
+															...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+															dragEnabled: checked,
+														})
+													}
+													className="data-[state=checked]:bg-[#2563EB] scale-75"
+												/>
+											</div>
+											{(cursorSfx?.dragEnabled ?? true) ? (
+												<div className="flex flex-col gap-1.5 pt-1">
+													<SliderControl
+														label={tSettings("effects.cursorSfx.volume", "Volume")}
+														value={cursorSfx?.dragVolume ?? 0.5}
+														defaultValue={0.5}
+														min={0}
+														max={1}
+														step={0.05}
+														onChange={(v) =>
+															onCursorSfxChange?.({
+																...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																dragVolume: v,
+															})
+														}
+														formatValue={(v) => `${Math.round(v * 100)}%`}
+														parseInput={(t) => parseFloat(t.replace(/%$/, "")) / 100}
+													/>
+												</div>
+											) : null}
+										</div>
+
+										{/* Whoosh SFX */}
+										<div className="flex flex-col gap-1.5 rounded-lg border border-foreground/5 bg-foreground/[0.02] p-2">
+											<div className="flex items-center justify-between">
+												<span className="text-[11px] font-medium text-foreground">
+													{tSettings("effects.cursorSfx.whoosh", "Whoosh Sound")}
+												</span>
+												<Switch
+													checked={cursorSfx?.whooshEnabled ?? true}
+													onCheckedChange={(checked) =>
+														onCursorSfxChange?.({
+															...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+															whooshEnabled: checked,
+														})
+													}
+													className="data-[state=checked]:bg-[#2563EB] scale-75"
+												/>
+											</div>
+											{(cursorSfx?.whooshEnabled ?? true) ? (
+												<div className="flex flex-col gap-1.5 pt-1">
+													<div className="flex items-center justify-between gap-2">
+														<span className="text-[10px] text-muted-foreground">Style</span>
+														<Select
+															value={cursorSfx?.whooshStyle ?? "procedural"}
+															onValueChange={(val) =>
+																onCursorSfxChange?.({
+																	...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																	whooshStyle: val as WhooshSfxStyle,
+																})
+															}
+														>
+															<SelectTrigger className="h-6 w-36 text-[10px] bg-editor-bg border-foreground/10">
+																<SelectValue />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="procedural">Dynamic (Procedural)</SelectItem>
+																<SelectItem value="fast">Fast (Sample)</SelectItem>
+																<SelectItem value="swoosh">Swoosh (Sample)</SelectItem>
+															</SelectContent>
+														</Select>
+													</div>
+													{(cursorSfx?.whooshStyle ?? "procedural") === "procedural" ? (
+														<p className="text-[9.5px] text-muted-foreground/80 bg-white/[0.03] border border-white/[0.06] rounded px-2 py-1 leading-tight">
+															Synthesized via code: adapts cutoff, resonance & stereo panning to cursor movement.
+														</p>
+													) : null}
+													<div className="flex items-center justify-between gap-2">
+														<span className="text-[10px] text-muted-foreground">Triggers</span>
+														<Select
+															value={cursorSfx?.whooshTriggers ?? "both"}
+															onValueChange={(val) =>
+																onCursorSfxChange?.({
+																	...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																	whooshTriggers: val as WhooshTriggerMode,
+																})
+															}
+														>
+															<SelectTrigger className="h-6 w-36 text-[10px] bg-editor-bg border-foreground/10">
+																<SelectValue />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="both">Movement + Zooms</SelectItem>
+																<SelectItem value="zooms">Zooms Only</SelectItem>
+																<SelectItem value="movement">Movement Only</SelectItem>
+															</SelectContent>
+														</Select>
+													</div>
+													<SliderControl
+														label={tSettings("effects.cursorSfx.volume", "Volume")}
+														value={cursorSfx?.whooshVolume ?? 0.6}
+														defaultValue={0.6}
+														min={0}
+														max={1}
+														step={0.05}
+														onChange={(v) =>
+															onCursorSfxChange?.({
+																...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																whooshVolume: v,
+															})
+														}
+														formatValue={(v) => `${Math.round(v * 100)}%`}
+														parseInput={(t) => parseFloat(t.replace(/%$/, "")) / 100}
+													/>
+												</div>
+											) : null}
+										</div>
+
+										{/* Action buttons */}
+										<div className="flex items-center gap-2 pt-1">
+											<Button
+												size="sm"
+												onClick={() => onGenerateCursorSfx?.({ settings: cursorSfx })}
+												className="h-7 flex-1 gap-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-[11px] font-medium"
+											>
+												<Sparkle className="h-3.5 w-3.5" />
+												Auto-Add SFX to Timeline
+											</Button>
+											{onClearCursorSfx ? (
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={onClearCursorSfx}
+													className="h-7 border-foreground/10 bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground text-[10px] px-2"
+												>
+													Clear
+												</Button>
+											) : null}
+										</div>
+									</div>
+								) : null}
+							</div>
 							{showDevMotionControls ? (
 								<div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2">
 									<div className="text-[10px] text-muted-foreground">
@@ -3779,6 +4195,8 @@ export function SettingsPanel({
 						if (activeEffectSection === "clip" && selectedClipId) return false;
 						if (activeEffectSection === "zoom" && selectedZoomId) return false;
 						if (activeEffectSection === "audio" && selectedAudioId) return false;
+						if (activeEffectSection === "transitions" && selectedTransitionId)
+							return false;
 						if (selectedAnnotationId) return false; // Annotation editor handles its own but let's see
 						return true;
 					})() && "hidden",
@@ -3823,6 +4241,17 @@ export function SettingsPanel({
 						{tSettings("audio.deleteRegion", "Delete Audio")}
 					</Button>
 				)}
+				{activeEffectSection === "transitions" && selectedTransitionId ? (
+					<Button
+						onClick={() => mediaLibrary?.onTransitionDelete?.(selectedTransitionId)}
+						variant="destructive"
+						size="sm"
+						className="h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+					>
+						<Trash2 className="h-3 w-3" />
+						{tSettings("transitions.delete", "Delete Transition")}
+					</Button>
+				) : null}
 				{selectedAnnotationId && (
 					<Button
 						onClick={() => {

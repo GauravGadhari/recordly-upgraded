@@ -6,7 +6,8 @@ import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import type { getSmokeExportConfig } from "../smokeExportConfig";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
-import type { CursorTelemetryPoint, SpeedRegion, ZoomRegion } from "../types";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
+import type { CursorTelemetryPoint, SpeedRegion, VerticalTrackingMode, ZoomRegion } from "../types";
 import type { VideoPlaybackRef } from "../VideoPlayback";
 import { summarizeErrorMessage } from "../videoEditorUtils";
 import type { PendingExportSave } from "./exportPersistence";
@@ -27,6 +28,8 @@ export type ExportRunnerInput = {
 	effectiveZoomRegions: ZoomRegion[];
 	effectiveCursorTelemetry: CursorTelemetryPoint[];
 	effectiveShowCursor: boolean;
+	aspectRatio?: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	ensureSupportedMp4SourceDimensions: (
 		frameRate: ReturnType<typeof useExportSettings>["mp4FrameRate"],
 	) => Promise<SupportedMp4Dimensions>;

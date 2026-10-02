@@ -4,17 +4,20 @@ import type {
 	CaptionCue,
 	ClipRegion,
 	SpeedRegion,
+	ZoomOutRegion,
 	ZoomRegion,
 } from "./types";
 
 export type EditorHistorySnapshot = {
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	clipRegions: ClipRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
 	audioRegions: AudioRegion[];
 	autoCaptions: CaptionCue[];
 	selectedZoomId: string | null;
+	selectedZoomOutId?: string | null;
 	selectedClipId: string | null;
 	selectedAnnotationId: string | null;
 	selectedAudioId: string | null;

@@ -6,7 +6,11 @@ import type { useAudioRegionCommands } from "../hooks/useAudioRegionCommands";
 import type { useCaptionCommands } from "../hooks/useCaptionCommands";
 import type { useClipRegionCommands } from "../hooks/useClipRegionCommands";
 import type { useEditorPlaybackControls } from "../hooks/useEditorPlaybackControls";
+import type { useMemeRegionCommands } from "../hooks/useMemeRegionCommands";
 import type { useTimelineProjection } from "../hooks/useTimelineProjection";
+import type { useTransitionRegionCommands } from "../hooks/useTransitionRegionCommands";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
+import type { useZoomOutRegionCommands } from "../hooks/useZoomOutRegionCommands";
 import type { useZoomRegionCommands } from "../hooks/useZoomRegionCommands";
 import type { useTimelineState } from "../state/useTimelineState";
 import TimelineEditor, { type TimelineEditorHandle } from "../timeline/TimelineEditor";
@@ -18,8 +22,11 @@ type Props = {
 	playback: ReturnType<typeof useEditorPlaybackControls>;
 	audio: ReturnType<typeof useVideoEditorAudio>;
 	zoomCommands: ReturnType<typeof useZoomRegionCommands>;
+	zoomOutCommands: ReturnType<typeof useZoomOutRegionCommands>;
 	clipCommands: ReturnType<typeof useClipRegionCommands>;
 	audioCommands: ReturnType<typeof useAudioRegionCommands>;
+	transitionCommands: ReturnType<typeof useTransitionRegionCommands>;
+	memeCommands: ReturnType<typeof useMemeRegionCommands>;
 	captionCommands: ReturnType<typeof useCaptionCommands>;
 	annotationCommands: ReturnType<typeof useAnnotationRegionCommands>;
 	videoPath: string | null;
@@ -31,6 +38,7 @@ type Props = {
 	disableSuggestedZooms: boolean;
 	currentTime: number;
 	handleSelectAnnotation: (id: string | null) => void;
+	aspectRatio?: AspectRatio;
 };
 
 export function EditorTimelinePanel(props: Props) {
@@ -41,8 +49,11 @@ export function EditorTimelinePanel(props: Props) {
 		playback,
 		audio,
 		zoomCommands,
+		zoomOutCommands,
 		clipCommands,
 		audioCommands,
+		transitionCommands,
+		memeCommands,
 		captionCommands,
 		annotationCommands,
 		videoPath,
@@ -54,10 +65,11 @@ export function EditorTimelinePanel(props: Props) {
 		disableSuggestedZooms,
 		currentTime,
 		handleSelectAnnotation,
+		aspectRatio,
 	} = props;
 
 	return (
-		<div className="flex flex-shrink-0 flex-col" style={{ height: "15%", minHeight: 160 }}>
+		<div className="flex h-full min-h-0 flex-col">
 			<TimelineEditor
 				ref={timelineRef}
 				videoDuration={projection.timelineDuration}
@@ -71,6 +83,7 @@ export function EditorTimelinePanel(props: Props) {
 				autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 				onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 				disableSuggestedZooms={disableSuggestedZooms}
+				aspectRatio={aspectRatio}
 				zoomRegions={timeline.zoomRegions}
 				onZoomAdded={zoomCommands.handleZoomAdded}
 				onZoomSuggested={zoomCommands.handleZoomSuggested}
@@ -78,6 +91,12 @@ export function EditorTimelinePanel(props: Props) {
 				onZoomDelete={zoomCommands.handleZoomDelete}
 				selectedZoomId={timeline.selectedZoomId}
 				onSelectZoom={zoomCommands.handleSelectZoom}
+				zoomOutRegions={timeline.zoomOutRegions}
+				onZoomOutAdded={zoomOutCommands.handleZoomOutAdded}
+				onZoomOutSpanChange={zoomOutCommands.handleZoomOutSpanChange}
+				onZoomOutDelete={zoomOutCommands.handleZoomOutDelete}
+				selectedZoomOutId={timeline.selectedZoomOutId}
+				onSelectZoomOut={zoomOutCommands.handleSelectZoomOut}
 				trimRegions={timeline.trimRegions}
 				clipRegions={timeline.clipRegions}
 				onClipSplit={clipCommands.handleClipSplit}
@@ -88,9 +107,34 @@ export function EditorTimelinePanel(props: Props) {
 				onAudioAdded={audioCommands.handleAudioAdded}
 				onAudioSpanChange={audioCommands.handleAudioSpanChange}
 				onAudioDelete={audioCommands.handleAudioDelete}
+				onSuggestSfx={() =>
+					audioCommands.handleGenerateCursorSfx({
+						telemetry: normalizedCursorTelemetry,
+						zoomRegions: timeline.zoomRegions,
+						keystrokes: timeline.keystrokes,
+						duration: projection.timelineDuration,
+					})
+				}
 				selectedAudioId={timeline.selectedAudioId}
 				onSelectAudio={audioCommands.handleSelectAudio}
+				transitionRegions={timeline.transitionRegions}
+				onApplyCutTransition={(params) =>
+					transitionCommands.handleSetCutTransition({
+						...params,
+						totalMs: Math.round(projection.timelineDuration * 1000),
+					})
+				}
+				onTransitionSpanChange={transitionCommands.handleTransitionSpanChange}
+				onTransitionDelete={transitionCommands.handleTransitionDelete}
+				selectedTransitionId={timeline.selectedTransitionId}
+				onSelectTransition={transitionCommands.handleSelectTransition}
+				memeRegions={timeline.memeRegions}
+				onMemeSpanChange={memeCommands.handleMemeSpanChange}
+				onMemeDelete={memeCommands.handleMemeDelete}
+				selectedMemeId={timeline.selectedMemeId}
+				onSelectMeme={memeCommands.handleSelectMeme}
 				captionRegions={projection.effectiveCaptionRegions}
+				keystrokes={timeline.keystrokes}
 				onCaptionSpanChange={(id, span) => {
 					const fragment = projection.effectiveCaptionRegions.find(
 						(cue) => cue.id === id,

@@ -34,6 +34,7 @@ import {
 } from "../state";
 import {
 	approveUserPath,
+	getKeystrokeTelemetryPathForVideo,
 	getRecordingsDir,
 	getTelemetryPathForVideo,
 	isAutoRecordingPath,
@@ -744,9 +745,11 @@ export function registerProjectHandlers() {
 				return { success: false, error: "Only auto-generated recordings can be deleted" };
 			}
 			await fs.unlink(resolvedPath);
-			// Also delete the cursor telemetry sidecar if it exists
+			// Also delete cursor and keystroke telemetry sidecars if they exist
 			const telemetryPath = getTelemetryPathForVideo(resolvedPath);
 			await fs.unlink(telemetryPath).catch(() => undefined);
+			const keystrokePath = getKeystrokeTelemetryPathForVideo(resolvedPath);
+			await fs.unlink(keystrokePath).catch(() => undefined);
 			const currentResolved = currentVideoPath
 				? await fs.realpath(currentVideoPath).catch(() => currentVideoPath)
 				: null;

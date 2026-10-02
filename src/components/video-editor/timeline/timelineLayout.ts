@@ -1,5 +1,5 @@
 export const TIMELINE_AXIS_HEIGHT_PX = 32;
-export const TIMELINE_ROW_MIN_HEIGHT_PX = 28;
+export const TIMELINE_ROW_MIN_HEIGHT_PX = 36;
 export const TIMELINE_VISIBLE_ROW_COUNT = 2;
 
 function normalizeRowCount(rowCount: number) {

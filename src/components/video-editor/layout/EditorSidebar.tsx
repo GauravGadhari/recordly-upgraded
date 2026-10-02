@@ -3,7 +3,10 @@ import {
 	ClosedCaptioning,
 	Cursor,
 	Gear,
+	Keyboard,
 	PuzzlePiece,
+	Smiley,
+	SpeakerHigh,
 	Sparkle,
 	UserCircle,
 } from "@phosphor-icons/react";
@@ -28,11 +31,26 @@ export function EditorSidebar({ t, activeSection, setActiveSection, settingsPane
 		() => [
 			{ id: "scene" as const, label: t("settings.sections.scene", "Scene"), icon: Sparkle },
 			{ id: "cursor" as const, label: t("settings.sections.cursor", "Cursor"), icon: Cursor },
+			{
+				id: "keystrokes" as const,
+				label: t("settings.sections.keystrokes", "Keystrokes"),
+				icon: Keyboard,
+			},
 			{ id: "webcam" as const, label: t("settings.sections.webcam", "Webcam"), icon: Camera },
 			{
 				id: "captions" as const,
 				label: t("settings.sections.captions", "Captions"),
 				icon: ClosedCaptioning,
+			},
+			{
+				id: "sounds" as const,
+				label: t("settings.sections.sounds", "Sounds"),
+				icon: SpeakerHigh,
+			},
+			{
+				id: "memes" as const,
+				label: t("settings.sections.memes", "Memes"),
+				icon: Smiley,
 			},
 			{
 				id: "settings" as const,
@@ -48,7 +66,7 @@ export function EditorSidebar({ t, activeSection, setActiveSection, settingsPane
 		[t],
 	);
 	return (
-		<div className="flex flex-shrink-0 gap-1.5">
+		<div className="flex h-full min-h-0 flex-shrink-0 gap-1.5 overflow-hidden">
 			<div className="flex flex-shrink-0 flex-col items-center gap-0.5 px-2 py-2">
 				{sections.map((section) => {
 					const isActive = activeSection === section.id;

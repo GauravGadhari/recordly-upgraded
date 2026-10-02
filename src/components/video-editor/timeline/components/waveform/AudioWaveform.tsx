@@ -102,13 +102,13 @@ function AudioWaveformComponent({
 				if (normalize) amplitude = Math.sqrt(Math.max(0, amplitude));
 				amplitude = Math.max(0, Math.min(1, amplitude * gain));
 
-				const barHeight = amplitude * midY * 0.85;
+				const barHeight = amplitude > 0 ? Math.max(1, amplitude * midY * 0.85) : 0;
 
 				ctx.moveTo(px, midY - barHeight);
 				ctx.lineTo(px, midY + barHeight);
 			}
 
-			ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+			ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
 			ctx.lineWidth = dpr;
 			ctx.stroke();
 		};

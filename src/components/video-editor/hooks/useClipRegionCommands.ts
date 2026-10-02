@@ -25,6 +25,8 @@ interface UseClipRegionCommandsParams {
 	setSelectedAnnotationId: Dispatch<SetStateAction<string | null>>;
 	setSelectedAudioId: Dispatch<SetStateAction<string | null>>;
 	setSelectedCaptionId: Dispatch<SetStateAction<string | null>>;
+	setSelectedTransitionId?: Dispatch<SetStateAction<string | null>>;
+	setSelectedMemeId?: Dispatch<SetStateAction<string | null>>;
 	setActiveEffectSection: Dispatch<SetStateAction<EditorEffectSection>>;
 	nextClipIdRef: MutableRefObject<number>;
 	t: Translator;
@@ -42,6 +44,8 @@ export function useClipRegionCommands({
 	setSelectedAnnotationId,
 	setSelectedAudioId,
 	setSelectedCaptionId,
+	setSelectedTransitionId,
+	setSelectedMemeId,
 	setActiveEffectSection,
 	nextClipIdRef,
 	t,
@@ -55,6 +59,8 @@ export function useClipRegionCommands({
 				setSelectedAnnotationId(null);
 				setSelectedAudioId(null);
 				setSelectedCaptionId(null);
+				setSelectedTransitionId?.(null);
+				setSelectedMemeId?.(null);
 			} else {
 				setActiveEffectSection((section) => (section === "clip" ? "scene" : section));
 			}
@@ -65,6 +71,8 @@ export function useClipRegionCommands({
 			setSelectedAudioId,
 			setSelectedCaptionId,
 			setSelectedClipId,
+			setSelectedTransitionId,
+			setSelectedMemeId,
 			setSelectedZoomId,
 		],
 	);

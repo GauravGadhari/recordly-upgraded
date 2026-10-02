@@ -41,7 +41,18 @@ export interface TimelineRenderItem {
 	speedValue?: number;
 	showSourceAudio?: boolean;
 	muted?: boolean;
-	variant: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio" | "caption";
+	variant:
+		| "zoom"
+		| "zoom-out"
+		| "trim"
+		| "clip"
+		| "annotation"
+		| "speed"
+		| "audio"
+		| "caption"
+		| "keystroke"
+		| "transition"
+		| "meme";
 }
 
 export interface AudioPeaksData {

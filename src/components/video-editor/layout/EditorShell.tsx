@@ -20,6 +20,7 @@ import { EditorHeader } from "./EditorHeader";
 import { EditorPreviewPanel } from "./EditorPreviewPanel";
 import { EditorSidebar } from "./EditorSidebar";
 import { EditorTimelinePanel } from "./EditorTimelinePanel";
+import { EditorWorkspace } from "./EditorWorkspace";
 
 type Props = {
 	t: ReturnType<typeof useI18n>["t"];
@@ -83,8 +84,11 @@ export function EditorShell(props: Props) {
 		playback,
 		captionCommands,
 		zoomCommands,
+		zoomOutCommands,
 		clipCommands,
 		audioCommands,
+		transitionCommands,
+		memeCommands,
 		annotationCommands,
 		handleSelectAnnotation,
 		handleAutoSuggestZoomsConsumed,
@@ -179,68 +183,81 @@ export function EditorShell(props: Props) {
 				exportMessage={exportMessage}
 			/>
 			<EditorAnnouncementBanner />
-			<div className="relative flex min-h-0 flex-1 flex-col gap-3 p-4">
-				<div className="relative z-10 flex min-h-0 flex-1 gap-3">
-					<EditorSidebar
-						t={t}
-						activeSection={ui.activeEffectSection}
-						setActiveSection={ui.setActiveEffectSection}
-						settingsPanelProps={settingsPanelProps}
-					/>
-					<EditorPreviewPanel
-						t={t}
-						videoPath={project.videoPath}
-						previewVersion={ui.previewVersion}
-						aspectRatio={ui.aspectRatio}
-						setAspectRatio={ui.setAspectRatio}
-						previewAspectRatioValue={previewAspectRatioValue}
-						videoPlaybackRef={ui.videoPlaybackRef}
-						timelineRef={ui.timelineRef}
-						currentTime={ui.currentTime}
-						isPlaying={ui.isPlaying}
-						previewVolume={ui.previewVolume}
-						setPreviewVolume={ui.setPreviewVolume}
-						suspendRendering={exportStatus.shouldSuspendPreviewRendering}
-						appearance={appearance}
-						timeline={timeline}
-						audio={audio}
-						projection={projection}
-						playback={playback}
-						zoomCommands={zoomCommands}
-						annotationCommands={annotationCommands}
-						effectiveCursorTelemetry={cursor.effectiveCursorTelemetry}
-						effectiveShowCursor={effectiveShowCursor}
-						isCropped={ui.isCropped}
-						handleOpenCropEditor={ui.handleOpenCropEditor}
-						handleSaveAutoCaptionEdit={autoCaption.handleSaveAutoCaptionEdit}
-						handleSelectAnnotation={handleSelectAnnotation}
-						setDuration={ui.setDuration}
-						setIsPreviewReady={ui.setIsPreviewReady}
-						setCurrentTime={ui.setCurrentTime}
-						setIsPlaying={ui.setIsPlaying}
-						setError={project.setError}
-					/>
-				</div>
-				<EditorTimelinePanel
-					timelineRef={ui.timelineRef}
-					timeline={timeline}
-					projection={projection}
-					playback={playback}
-					audio={audio}
-					zoomCommands={zoomCommands}
-					clipCommands={clipCommands}
-					audioCommands={audioCommands}
-					captionCommands={captionCommands}
-					annotationCommands={annotationCommands}
-					videoPath={project.videoPath}
-					videoSourcePath={project.videoSourcePath}
-					cursorTelemetrySourcePath={timeline.cursorTelemetrySourcePath}
-					normalizedCursorTelemetry={cursor.normalizedCursorTelemetry}
-					autoSuggestZoomsTrigger={ui.autoSuggestZoomsTrigger}
-					handleAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
-					disableSuggestedZooms={!appearance.autoApplyFreshRecordingAutoZooms}
-					currentTime={ui.currentTime}
-					handleSelectAnnotation={handleSelectAnnotation}
+			<div className="relative flex min-h-0 flex-1 p-4">
+				<EditorWorkspace
+					sidebar={
+						<EditorSidebar
+							t={t}
+							activeSection={ui.activeEffectSection}
+							setActiveSection={ui.setActiveEffectSection}
+							settingsPanelProps={settingsPanelProps}
+						/>
+					}
+					preview={
+						<EditorPreviewPanel
+							t={t}
+							videoPath={project.videoPath}
+							previewVersion={ui.previewVersion}
+							aspectRatio={ui.aspectRatio}
+							setAspectRatio={ui.setAspectRatio}
+							verticalTrackingMode={ui.verticalTrackingMode}
+							setVerticalTrackingMode={ui.setVerticalTrackingMode}
+							previewAspectRatioValue={previewAspectRatioValue}
+							videoPlaybackRef={ui.videoPlaybackRef}
+							timelineRef={ui.timelineRef}
+							currentTime={ui.currentTime}
+							isPlaying={ui.isPlaying}
+							previewVolume={ui.previewVolume}
+							setPreviewVolume={ui.setPreviewVolume}
+							suspendRendering={exportStatus.shouldSuspendPreviewRendering}
+							appearance={appearance}
+							timeline={timeline}
+							audio={audio}
+							projection={projection}
+							playback={playback}
+							zoomCommands={zoomCommands}
+							annotationCommands={annotationCommands}
+							memeCommands={memeCommands}
+							effectiveCursorTelemetry={cursor.effectiveCursorTelemetry}
+							effectiveShowCursor={effectiveShowCursor}
+							isCropped={ui.isCropped}
+							handleOpenCropEditor={ui.handleOpenCropEditor}
+							handleSaveAutoCaptionEdit={autoCaption.handleSaveAutoCaptionEdit}
+							handleSelectAnnotation={handleSelectAnnotation}
+							setDuration={ui.setDuration}
+							setIsPreviewReady={ui.setIsPreviewReady}
+							setCurrentTime={ui.setCurrentTime}
+							setIsPlaying={ui.setIsPlaying}
+							setError={project.setError}
+						/>
+					}
+					timeline={
+						<EditorTimelinePanel
+							timelineRef={ui.timelineRef}
+							timeline={timeline}
+							projection={projection}
+							playback={playback}
+							audio={audio}
+							zoomCommands={zoomCommands}
+							zoomOutCommands={zoomOutCommands}
+							aspectRatio={ui.aspectRatio}
+							clipCommands={clipCommands}
+							audioCommands={audioCommands}
+							transitionCommands={transitionCommands}
+							memeCommands={memeCommands}
+							captionCommands={captionCommands}
+							annotationCommands={annotationCommands}
+							videoPath={project.videoPath}
+							videoSourcePath={project.videoSourcePath}
+							cursorTelemetrySourcePath={timeline.cursorTelemetrySourcePath}
+							normalizedCursorTelemetry={cursor.normalizedCursorTelemetry}
+							autoSuggestZoomsTrigger={ui.autoSuggestZoomsTrigger}
+							handleAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
+							disableSuggestedZooms={!appearance.autoApplyFreshRecordingAutoZooms}
+							currentTime={ui.currentTime}
+							handleSelectAnnotation={handleSelectAnnotation}
+						/>
+					}
 				/>
 			</div>
 			{editorDialogs}

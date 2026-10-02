@@ -54,4 +54,15 @@ describe("resolveTimelineWheelPanDeltaPx", () => {
 			}),
 		).toBe(20);
 	});
+
+	it("uses alt-modified vertical wheel movement for timeline panning", () => {
+		expect(
+			resolveTimelineWheelPanDeltaPx({
+				deltaX: 0,
+				deltaY: 3,
+				deltaMode: 1,
+				altKey: true,
+			}),
+		).toBe(48);
+	});
 });

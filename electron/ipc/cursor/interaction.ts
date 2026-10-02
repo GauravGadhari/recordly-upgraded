@@ -13,10 +13,12 @@ import {
 } from "../state";
 import type {
 	CursorInteractionType,
+	HookKeyEvent,
 	HookMouseEvent,
 	UiohookLike,
 	UiohookModuleNamespace,
 } from "../types";
+import { recordKeyDown, recordKeyUp } from "./keystrokeTelemetry";
 import {
 	getCursorCaptureElapsedMs,
 	getHookCursorScreenPoint,
@@ -289,8 +291,30 @@ export async function startInteractionCapture() {
 			setLinuxCursorScreenPoint({ x: point.x, y: point.y, updatedAt: Date.now() });
 		};
 
+		const onKeyDown = (event: HookKeyEvent) => {
+			const keycode = event.keycode ?? event.data?.keycode;
+			if (typeof keycode === "number") {
+				recordKeyDown(keycode, {
+					source: "uiohook",
+					altKey: event.altKey,
+					ctrlKey: event.ctrlKey,
+					metaKey: event.metaKey,
+					shiftKey: event.shiftKey,
+				});
+			}
+		};
+
+		const onKeyUp = (event: HookKeyEvent) => {
+			const keycode = event.keycode ?? event.data?.keycode;
+			if (typeof keycode === "number") {
+				recordKeyUp(keycode, false);
+			}
+		};
+
 		hook.on("mousedown", onMouseDown);
 		hook.on("mouseup", onMouseUp);
+		hook.on("keydown", onKeyDown);
+		hook.on("keyup", onKeyUp);
 		if (process.platform === "linux") {
 			hook.on("mousemove", onMouseMove);
 		}
@@ -300,12 +324,16 @@ export async function startInteractionCapture() {
 				if (typeof hook.off === "function") {
 					hook.off("mousedown", onMouseDown);
 					hook.off("mouseup", onMouseUp);
+					hook.off("keydown", onKeyDown);
+					hook.off("keyup", onKeyUp);
 					if (process.platform === "linux") {
 						hook.off("mousemove", onMouseMove);
 					}
 				} else if (typeof hook.removeListener === "function") {
 					hook.removeListener("mousedown", onMouseDown);
 					hook.removeListener("mouseup", onMouseUp);
+					hook.removeListener("keydown", onKeyDown);
+					hook.removeListener("keyup", onKeyUp);
 					if (process.platform === "linux") {
 						hook.removeListener("mousemove", onMouseMove);
 					}

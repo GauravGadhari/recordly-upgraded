@@ -56,6 +56,7 @@ type Input = {
 	projectNameInputRef: RefObject<HTMLInputElement>;
 	projectSaveDialogInputRef: RefObject<HTMLInputElement>;
 	nextZoomIdRef: MutableRefObject<number>;
+	nextZoomOutIdRef: MutableRefObject<number>;
 	nextClipIdRef: MutableRefObject<number>;
 	nextAudioIdRef: MutableRefObject<number>;
 	nextAnnotationIdRef: MutableRefObject<number>;
@@ -93,6 +94,7 @@ export function useEditorProjectController(input: Input) {
 	const history = useEditorHistory({
 		timeline: input.timeline,
 		nextZoomIdRef: input.nextZoomIdRef,
+		nextZoomOutIdRef: input.nextZoomOutIdRef,
 		nextClipIdRef: input.nextClipIdRef,
 		nextAnnotationIdRef: input.nextAnnotationIdRef,
 		nextAudioIdRef: input.nextAudioIdRef,
@@ -118,6 +120,7 @@ export function useEditorProjectController(input: Input) {
 		resetHistory: history.resetHistory,
 		refs: {
 			nextZoomIdRef: input.nextZoomIdRef,
+			nextZoomOutIdRef: input.nextZoomOutIdRef,
 			nextClipIdRef: input.nextClipIdRef,
 			nextAudioIdRef: input.nextAudioIdRef,
 			nextAnnotationIdRef: input.nextAnnotationIdRef,

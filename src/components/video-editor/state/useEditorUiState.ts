@@ -4,7 +4,7 @@ import { type AnnouncementEditorSection, isAnnouncementEditorSection } from "@/l
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import type { loadEditorPreferences } from "../editorPreferences";
 import type { TimelineEditorHandle } from "../timeline/TimelineEditor";
-import type { CropRegion, EditorEffectSection } from "../types";
+import type { CropRegion, EditorEffectSection, VerticalTrackingMode } from "../types";
 import type { VideoPlaybackRef } from "../VideoPlayback";
 
 type SessionPresentation = {
@@ -45,6 +45,9 @@ export function useEditorUiState(
 	const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
 	const [previewVolume, setPreviewVolume] = useState(1);
 	const [aspectRatio, setAspectRatio] = useState<AspectRatio>(initialPreferences.aspectRatio);
+	const [verticalTrackingMode, setVerticalTrackingMode] = useState<VerticalTrackingMode>(
+		initialPreferences.verticalTrackingMode ?? "auto-follow",
+	);
 	const [activeEffectSection, setActiveEffectSection] = useState<EditorEffectSection>("scene");
 	const [showCropModal, setShowCropModal] = useState(false);
 	const [previewVersion, setPreviewVersion] = useState(0);
@@ -57,6 +60,7 @@ export function useEditorUiState(
 	const projectNameInputRef = useRef<HTMLInputElement | null>(null);
 	const projectSaveDialogInputRef = useRef<HTMLInputElement | null>(null);
 	const nextZoomIdRef = useRef(1);
+	const nextZoomOutIdRef = useRef(1);
 	const nextClipIdRef = useRef(1);
 	const clipInitializedRef = useRef(false);
 	const autoFullTrackClipIdRef = useRef<string | null>(null);
@@ -141,6 +145,8 @@ export function useEditorUiState(
 		setPreviewVolume,
 		aspectRatio,
 		setAspectRatio,
+		verticalTrackingMode,
+		setVerticalTrackingMode,
 		activeEffectSection,
 		setActiveEffectSection,
 		showCropModal,
@@ -156,6 +162,7 @@ export function useEditorUiState(
 		projectNameInputRef,
 		projectSaveDialogInputRef,
 		nextZoomIdRef,
+		nextZoomOutIdRef,
 		nextClipIdRef,
 		clipInitializedRef,
 		autoFullTrackClipIdRef,

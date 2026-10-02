@@ -25,4 +25,24 @@ describe("clip span changes", () => {
 		const moved = { ...clip, startMs: 2000, endMs: 6000, sourceStartMs: 0 };
 		expect(changeClipSpan(moved, 1000, 6000, 12000)).toEqual(moved);
 	});
+	it("safely handles clips with undefined speed and defaults to 1x", () => {
+		const unspedClip = { id: "clip", startMs: 1000, endMs: 4000, sourceStartMs: 1000 };
+		expect(changeClipSpan(unspedClip, 1500, 4000, 10000)).toEqual({
+			...unspedClip,
+			startMs: 1500,
+			endMs: 4000,
+			sourceStartMs: 1500,
+			speed: 1,
+		});
+	});
+	it("safely handles source duration <= 0 without collapsing endMs", () => {
+		const unspedClip = { id: "clip", startMs: 1000, endMs: 4000, sourceStartMs: 1000 };
+		expect(changeClipSpan(unspedClip, 1000, 5000, 0)).toEqual({
+			...unspedClip,
+			startMs: 1000,
+			endMs: 5000,
+			sourceStartMs: 1000,
+			speed: 1,
+		});
+	});
 });

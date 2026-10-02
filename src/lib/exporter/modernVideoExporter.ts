@@ -8,15 +8,22 @@ import type {
 	CursorClickEffectStyle,
 	CursorStyle,
 	CursorTelemetryPoint,
+	KeystrokeEvent,
+	KeystrokeVisualSettings,
+	MemeRegion,
 	Padding,
 	SourceAudioTrackSettings,
 	SpeedRegion,
+	TransitionRegion,
 	TrimRegion,
 	WebcamOverlaySettings,
+	VerticalTrackingMode,
 	ZoomMotionBlurTuning,
+	ZoomOutRegion,
 	ZoomRegion,
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import { DEFAULT_WEBCAM_ROUNDNESS } from "@/components/video-editor/types";
 import { createCursorFollowCameraState } from "@/components/video-editor/videoPlayback/cursorFollowCamera";
 import { buildNativeCursorAtlas } from "@/components/video-editor/videoPlayback/cursorRenderer";
@@ -70,6 +77,7 @@ import {
 	withFinalizationTimeout,
 } from "./finalizationTimeout";
 import { getLocalFilePath } from "./localMediaSource";
+import { buildMediaOverlayAudioRegions } from "./mediaOverlayRenderer";
 import { FrameRenderer as ModernFrameRenderer } from "./modernFrameRenderer";
 import {
 	getOrderedSupportedMp4EncoderCandidates,
@@ -97,6 +105,7 @@ interface VideoExporterConfig extends ExportConfig {
 	videoUrl: string;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
 	showShadow: boolean;
@@ -116,12 +125,16 @@ interface VideoExporterConfig extends ExportConfig {
 	borderRadius?: number;
 	padding?: Padding | number;
 	videoPadding?: Padding | number;
+	aspectRatio?: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	cropRegion: CropRegion;
 	webcam?: WebcamOverlaySettings;
 	webcamUrl?: string | null;
 	annotationRegions?: AnnotationRegion[];
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
+	keystrokes?: KeystrokeEvent[];
+	keystrokeSettings?: KeystrokeVisualSettings;
 	cursorTelemetry?: CursorTelemetryPoint[];
 	showCursor?: boolean;
 	cursorStyle?: CursorStyle;
@@ -141,11 +154,14 @@ interface VideoExporterConfig extends ExportConfig {
 	cursorClickEffectDurationMs?: number;
 	cursorClickBounce?: number;
 	cursorClickBounceDuration?: number;
+	cursorClickDepth?: number;
 	cursorSway?: number;
 	zoomSmoothness?: number;
 	zoomClassicMode?: boolean;
 	audioRegions?: AudioRegion[];
 	clipRegions?: ClipRegion[];
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
 	sourceAudioFallbackPaths?: string[];
 	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
 	sourceAudioTrackSettings?: SourceAudioTrackSettings;
@@ -306,6 +322,15 @@ const NATIVE_STATIC_LAYOUT_MAX_EXTRACTING_PROGRESS = 95;
 const NATIVE_STATIC_LAYOUT_FRAME_COMPLETE_PROGRESS = 96;
 
 export class ModernVideoExporter {
+	private getMixedAudioRegions(): AudioRegion[] {
+		return [
+			...(this.config.audioRegions ?? []),
+			...buildMediaOverlayAudioRegions(
+				this.config.memeRegions,
+				this.config.transitionRegions,
+			),
+		];
+	}
 	private static readonly NATIVE_ENCODER_QUEUE_LIMIT = 64;
 	private static readonly NATIVE_WRITE_BATCH_MAX_CHUNKS = 12;
 	private static readonly NATIVE_WRITE_BATCH_MAX_BYTES = 2 * 1024 * 1024;
@@ -607,6 +632,7 @@ export class ModernVideoExporter {
 					preferredRenderBackend: undefined,
 					wallpaper: this.config.wallpaper,
 					zoomRegions: this.config.zoomRegions,
+					zoomOutRegions: this.config.zoomOutRegions,
 					showShadow: this.config.showShadow,
 					shadowIntensity: this.config.shadowIntensity,
 					backgroundBlur: this.config.backgroundBlur,
@@ -623,6 +649,8 @@ export class ModernVideoExporter {
 					connectedZoomEasing: this.config.connectedZoomEasing,
 					borderRadius: this.config.borderRadius,
 					padding: this.config.padding,
+					aspectRatio: this.config.aspectRatio,
+					verticalTrackingMode: this.config.verticalTrackingMode,
 					cropRegion: this.config.cropRegion,
 					webcam: this.config.webcam,
 					webcamUrl: this.config.webcamUrl,
@@ -631,6 +659,8 @@ export class ModernVideoExporter {
 					annotationRegions: this.config.annotationRegions,
 					autoCaptions: this.config.autoCaptions,
 					autoCaptionSettings: this.config.autoCaptionSettings,
+					keystrokes: this.config.keystrokes,
+					keystrokeSettings: this.config.keystrokeSettings,
 					speedRegions: this.config.speedRegions,
 					previewWidth: this.config.previewWidth,
 					previewHeight: this.config.previewHeight,
@@ -653,9 +683,12 @@ export class ModernVideoExporter {
 					cursorClickEffectDurationMs: this.config.cursorClickEffectDurationMs,
 					cursorClickBounce: this.config.cursorClickBounce,
 					cursorClickBounceDuration: this.config.cursorClickBounceDuration,
+					cursorClickDepth: this.config.cursorClickDepth,
 					cursorSway: this.config.cursorSway,
 					zoomSmoothness: this.config.zoomSmoothness,
 					zoomClassicMode: this.config.zoomClassicMode,
+					transitionRegions: this.config.transitionRegions,
+					memeRegions: this.config.memeRegions,
 				});
 				await this.renderer.initialize();
 				this.rendererInitTimeMs = this.getNowMs() - stageStartedAt;
@@ -817,7 +850,7 @@ export class ModernVideoExporter {
 					const demuxer = this.streamingDecoder.getDemuxer();
 					if (
 						demuxer ||
-						(this.config.audioRegions ?? []).length > 0 ||
+						this.getMixedAudioRegions().length > 0 ||
 						(this.config.sourceAudioFallbackPaths ?? []).length > 0
 					) {
 						this.audioProcessor = new AudioProcessor();
@@ -834,7 +867,7 @@ export class ModernVideoExporter {
 									this.config.trimRegions,
 									this.config.speedRegions,
 									undefined,
-									this.config.audioRegions,
+									this.getMixedAudioRegions(),
 									this.config.sourceAudioFallbackPaths,
 									this.config.sourceAudioFallbackStartDelayMsByPath,
 									this.config.sourceAudioTrackSettings,
@@ -1454,7 +1487,7 @@ export class ModernVideoExporter {
 
 	private buildNativeAudioPlan(videoInfo: DecodedVideoInfo): NativeAudioPlan {
 		const speedRegions = this.config.speedRegions ?? [];
-		const audioRegions = this.config.audioRegions ?? [];
+		const audioRegions = this.getMixedAudioRegions();
 		const sourceAudioFallbackPaths = this.getNativeAudioFallbackPaths(videoInfo);
 		const hasTimedSourceAudioFallback = sourceAudioFallbackPaths.some(
 			(audioPath) =>
@@ -1719,7 +1752,8 @@ export class ModernVideoExporter {
 			reasons.push("unsupported-cursor-click-effect");
 		}
 
-		const hasZoomRegions = (this.config.zoomRegions ?? []).length > 0;
+		const hasZoomRegions =
+			(this.config.zoomRegions ?? []).length > 0 || (this.config.zoomOutRegions ?? []).length > 0;
 		const needsTimelineMap = this.shouldUseNativeStaticLayoutTimelineMap(
 			videoInfo,
 			effectiveDurationSec,
@@ -1743,8 +1777,20 @@ export class ModernVideoExporter {
 		if ((this.config.annotationRegions ?? []).length > 0) {
 			reasons.push("unsupported-annotation-overlay");
 		}
+		if ((this.config.transitionRegions ?? []).length > 0) {
+			reasons.push("unsupported-transition-overlay");
+		}
+		if ((this.config.memeRegions ?? []).length > 0) {
+			reasons.push("unsupported-meme-overlay");
+		}
 		if ((this.config.autoCaptions ?? []).length > 0) {
 			reasons.push("unsupported-caption-overlay");
+		}
+		if (
+			this.config.keystrokeSettings?.enabled &&
+			(this.config.keystrokes ?? []).length > 0
+		) {
+			reasons.push("unsupported-keystroke-overlay");
 		}
 		if (this.config.webcam?.enabled) {
 			// Native GPU compositors use a different corner and shadow model.
@@ -2139,7 +2185,7 @@ export class ModernVideoExporter {
 					this.config.videoUrl,
 					this.config.trimRegions,
 					this.config.speedRegions,
-					this.config.audioRegions,
+					this.getMixedAudioRegions(),
 					sourceAudioFallbackPaths,
 					this.config.sourceAudioFallbackStartDelayMsByPath,
 					this.config.sourceAudioTrackSettings,
@@ -2306,7 +2352,8 @@ export class ModernVideoExporter {
 			| undefined,
 	): NativeStaticLayoutZoomSample[] | undefined {
 		const zoomRegions = this.config.zoomRegions ?? [];
-		if (zoomRegions.length === 0 || totalFrames <= 0) {
+		const zoomOutRegions = this.config.zoomOutRegions ?? [];
+		if ((zoomRegions.length === 0 && zoomOutRegions.length === 0) || totalFrames <= 0) {
 			return undefined;
 		}
 
@@ -2334,6 +2381,7 @@ export class ModernVideoExporter {
 			const timeMs = frameIndex * frameDurationMs;
 			const target = resolveSceneZoomTarget({
 				zoomRegions,
+				zoomOutRegions,
 				timeMs,
 				connectZooms: this.config.connectZooms,
 				zoomInDurationMs: this.config.zoomInDurationMs,
@@ -2341,6 +2389,10 @@ export class ModernVideoExporter {
 				zoomClassicMode: this.config.zoomClassicMode,
 				cursorTelemetry: cursorTelemetry ?? [],
 				cursorFollowCamera,
+				aspectRatio: this.config.aspectRatio,
+				verticalTrackingMode: this.config.verticalTrackingMode,
+				stageSize,
+				baseMask,
 			});
 
 			const projectedTransform = computeZoomTransform({
@@ -2417,7 +2469,7 @@ export class ModernVideoExporter {
 				audioMode: audioPlan.audioMode,
 				zoomRegions: this.config.zoomRegions?.length ?? 0,
 				speedRegions: this.config.speedRegions?.length ?? 0,
-				audioRegions: this.config.audioRegions?.length ?? 0,
+				audioRegions: this.getMixedAudioRegions().length,
 				annotationRegions: this.config.annotationRegions?.length ?? 0,
 				backgroundBlur: this.config.backgroundBlur,
 				hasCursorOverlay:

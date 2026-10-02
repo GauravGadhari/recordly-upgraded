@@ -3,7 +3,7 @@ import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
-import type { CursorTelemetryPoint, ZoomRegion } from "../types";
+import type { CursorTelemetryPoint, VerticalTrackingMode, ZoomRegion } from "../types";
 import VideoPlayback, { type VideoPlaybackRef } from "../VideoPlayback";
 
 type PlaybackProps = ComponentProps<typeof VideoPlayback>;
@@ -15,12 +15,16 @@ type Handlers = Pick<
 	| "onSelectAnnotation"
 	| "onAnnotationPositionChange"
 	| "onAnnotationSizeChange"
+	| "onSelectMeme"
+	| "onMemePositionChange"
+	| "onMemeSizeChange"
 >;
 
 type Props = {
 	videoPath: string | null;
 	previewVersion: number;
 	aspectRatio: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	playbackRef: RefObject<VideoPlaybackRef>;
 	currentTime: number;
 	isPlaying: boolean;
@@ -44,6 +48,7 @@ export function EditorVideoPreview({
 	videoPath,
 	previewVersion,
 	aspectRatio,
+	verticalTrackingMode,
 	playbackRef,
 	currentTime,
 	isPlaying,
@@ -67,6 +72,7 @@ export function EditorVideoPreview({
 			clipRegions={timeline.clipRegions}
 			key={`${videoPath || "no-video"}:${previewVersion}:inline`}
 			aspectRatio={aspectRatio}
+			verticalTrackingMode={verticalTrackingMode}
 			ref={playbackRef}
 			videoPath={videoPath || ""}
 			onDurationChange={setDuration}
@@ -77,7 +83,9 @@ export function EditorVideoPreview({
 			onError={setError}
 			wallpaper={appearance.wallpaper}
 			zoomRegions={effectiveZoomRegions}
+			zoomOutRegions={timeline.zoomOutRegions}
 			selectedZoomId={timeline.selectedZoomId}
+			selectedZoomOutId={timeline.selectedZoomOutId}
 			isPlaying={isPlaying}
 			showShadow={appearance.shadowIntensity > 0}
 			shadowIntensity={appearance.shadowIntensity}
@@ -99,8 +107,13 @@ export function EditorVideoPreview({
 				appearance.webcam.sourcePath ? appearance.resolvedWebcamVideoUrl : null
 			}
 			annotationRegions={timeline.annotationRegions}
+			transitionRegions={timeline.transitionRegions}
+			memeRegions={timeline.memeRegions}
+			selectedMemeId={timeline.selectedMemeId}
 			autoCaptions={timeline.autoCaptions}
 			autoCaptionSettings={timeline.autoCaptionSettings}
+			keystrokes={timeline.keystrokes}
+			keystrokeSettings={timeline.keystrokeSettings}
 			selectedAnnotationId={timeline.selectedAnnotationId}
 			cursorTelemetry={effectiveCursorTelemetry}
 			showCursor={effectiveShowCursor}
@@ -125,6 +138,7 @@ export function EditorVideoPreview({
 			cursorClickEffectDurationMs={appearance.cursorClickEffectDurationMs}
 			cursorClickBounce={appearance.cursorClickBounce}
 			cursorClickBounceDuration={appearance.cursorClickBounceDuration}
+			cursorClickDepth={appearance.cursorClickDepth}
 			cursorSway={appearance.cursorSway}
 			volume={
 				audio.shouldMutePreviewVideo || audio.isCurrentClipMuted

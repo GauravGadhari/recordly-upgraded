@@ -9,13 +9,20 @@ import type {
 	CursorClickEffectStyle,
 	CursorStyle,
 	CursorTelemetryPoint,
+	KeystrokeEvent,
+	KeystrokeVisualSettings,
+	MemeRegion,
 	Padding,
 	SpeedRegion,
+	TransitionRegion,
+	VerticalTrackingMode,
 	WebcamOverlaySettings,
 	ZoomMotionBlurTuning,
+	ZoomOutRegion,
 	ZoomRegion,
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import {
 	BASE_PREVIEW_HEIGHT,
 	BASE_PREVIEW_WIDTH,
@@ -73,8 +80,16 @@ import {
 import { isVideoWallpaperSource } from "@/lib/wallpapers";
 import { renderAnnotations } from "./annotationRenderer";
 import { renderCaptions } from "./captionRenderer";
+import { renderKeystrokes } from "./keystrokeRenderer";
 import { ForwardFrameSource } from "./forwardFrameSource";
 import { resolveMediaElementSource } from "./localMediaSource";
+import {
+	drawActiveMemes,
+	drawActiveTransitions,
+	hasActiveMeme,
+	hasActiveTransition,
+	OverlayVideoPool,
+} from "./mediaOverlayRenderer";
 
 
 interface FrameRenderConfig {
@@ -84,6 +99,7 @@ interface FrameRenderConfig {
 	preferredRenderBackend?: "webgl" | "webgpu";
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	showShadow: boolean;
 	shadowIntensity: number;
 	backgroundBlur: number;
@@ -100,6 +116,8 @@ interface FrameRenderConfig {
 	connectedZoomEasing?: ZoomTransitionEasing;
 	borderRadius?: number;
 	padding?: Padding | number;
+	aspectRatio?: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	cropRegion: CropRegion;
 	webcam?: WebcamOverlaySettings;
 	webcamUrl?: string | null;
@@ -108,6 +126,8 @@ interface FrameRenderConfig {
 	annotationRegions?: AnnotationRegion[];
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
+	keystrokes?: KeystrokeEvent[];
+	keystrokeSettings?: KeystrokeVisualSettings;
 	speedRegions?: SpeedRegion[];
 	previewWidth?: number;
 	previewHeight?: number;
@@ -132,7 +152,10 @@ interface FrameRenderConfig {
 	cursorClickEffectDurationMs?: number;
 	cursorClickBounce?: number;
 	cursorClickBounceDuration?: number;
+	cursorClickDepth?: number;
 	cursorSway?: number;
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
 }
 
 interface AnimationState {
@@ -235,6 +258,7 @@ export class FrameRenderer {
 	private shadowCtx: CanvasRenderingContext2D | null = null;
 	private compositeCanvas: HTMLCanvasElement | null = null;
 	private compositeCtx: CanvasRenderingContext2D | null = null;
+	private readonly overlayVideoPool = new OverlayVideoPool();
 	private backgroundForwardFrameSource: ForwardFrameSource | null = null;
 	private backgroundForwardFrameSourceUrl: string | null = null;
 	private backgroundForwardFrameDurationSec: number | null = null;
@@ -422,6 +446,7 @@ export class FrameRenderer {
 				clickBounceDuration:
 					this.config.cursorClickBounceDuration ??
 					DEFAULT_CURSOR_CONFIG.clickBounceDuration,
+				clickDepth: this.config.cursorClickDepth ?? DEFAULT_CURSOR_CONFIG.clickDepth,
 				sway: this.config.cursorSway ?? DEFAULT_CURSOR_CONFIG.sway,
 			});
 		}
@@ -1528,6 +1553,46 @@ export class FrameRenderer {
 				timestamp / 1000,
 			);
 		}
+
+		if (
+			this.config.keystrokes &&
+			this.config.keystrokes.length > 0 &&
+			this.config.keystrokeSettings &&
+			this.compositeCtx
+		) {
+			renderKeystrokes(
+				this.compositeCtx,
+				this.config.keystrokes,
+				this.config.keystrokeSettings,
+				this.config.width,
+				this.config.height,
+				cursorTimestamp / 1000,
+			);
+		}
+
+		// Meme + transition regions composite above every other layer.
+		if (this.compositeCtx) {
+			if (hasActiveMeme(this.config.memeRegions ?? [], timeMs)) {
+				await drawActiveMemes(
+					this.compositeCtx,
+					this.config.memeRegions ?? [],
+					this.config.width,
+					this.config.height,
+					timeMs,
+					this.overlayVideoPool,
+				);
+			}
+			if (hasActiveTransition(this.config.transitionRegions ?? [], timeMs)) {
+				await drawActiveTransitions(
+					this.compositeCtx,
+					this.config.transitionRegions ?? [],
+					this.config.width,
+					this.config.height,
+					timeMs,
+					this.overlayVideoPool,
+				);
+			}
+		}
 	}
 
 	private updateLayout(): void {
@@ -1599,6 +1664,7 @@ export class FrameRenderer {
 
 		const target = resolveSceneZoomTarget({
 			zoomRegions: this.config.zoomRegions,
+			zoomOutRegions: this.config.zoomOutRegions,
 			timeMs,
 			cursorTimeMs,
 			connectZooms: this.config.connectZooms,
@@ -1607,6 +1673,10 @@ export class FrameRenderer {
 			zoomClassicMode: this.config.zoomClassicMode,
 			cursorTelemetry: this.config.cursorTelemetry,
 			cursorFollowCamera: this.cursorFollowCamera,
+			aspectRatio: this.config.aspectRatio,
+			verticalTrackingMode: this.config.verticalTrackingMode,
+			stageSize: this.layoutCache.stageSize,
+			baseMask: this.layoutCache.maskRect,
 		});
 
 		const state = this.animationState;
@@ -1963,6 +2033,7 @@ export class FrameRenderer {
 	}
 
 	destroy(): void {
+		this.overlayVideoPool.destroyAll();
 		if (this.videoSprite) {
 			const videoTexture = this.videoSprite.texture;
 			this.videoSprite.destroy({ texture: false, textureSource: false });

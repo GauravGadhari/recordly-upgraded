@@ -26,7 +26,7 @@ import {
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useProjectState } from "../state/useProjectState";
 import type { useTimelineState } from "../state/useTimelineState";
-import { DEFAULT_WEBCAM_TIME_OFFSET_MS } from "../types";
+import { DEFAULT_KEYSTROKE_SETTINGS, DEFAULT_WEBCAM_TIME_OFFSET_MS } from "../types";
 import type { VideoPlaybackRef } from "../VideoPlayback";
 import { cloneStructured } from "../videoEditorUtils";
 
@@ -57,6 +57,7 @@ type Input = {
 	resetHistory: () => void;
 	refs: {
 		nextZoomIdRef: MutableRefObject<number>;
+		nextZoomOutIdRef: MutableRefObject<number>;
 		nextClipIdRef: MutableRefObject<number>;
 		nextAudioIdRef: MutableRefObject<number>;
 		nextAnnotationIdRef: MutableRefObject<number>;
@@ -161,12 +162,14 @@ export function useProjectLifecycle(input: Input) {
 		appearance.setCursorMotionBlur(editor.cursorMotionBlur);
 		appearance.setCursorClickBounce(editor.cursorClickBounce);
 		appearance.setCursorClickBounceDuration(editor.cursorClickBounceDuration);
+		appearance.setCursorClickDepth(editor.cursorClickDepth);
 		appearance.setCursorSway(editor.cursorSway);
 		appearance.setBorderRadius(editor.borderRadius);
 		appearance.setPadding(editor.padding);
 		appearance.setCropRegion(editor.cropRegion);
 		appearance.setWebcam(editor.webcam);
 		timeline.setZoomRegions(editor.zoomRegions);
+		timeline.setZoomOutRegions(editor.zoomOutRegions ?? []);
 		timeline.setTrimRegions(editor.trimRegions);
 		timeline.setClipRegions(editor.clipRegions);
 		// An explicit empty clip list means the user deleted all footage, not a legacy project.
@@ -180,6 +183,10 @@ export function useProjectLifecycle(input: Input) {
 		timeline.setDefaultSourceAudioTrackSettings(editor.defaultSourceAudioTrackSettings ?? {});
 		timeline.setAutoCaptions(editor.autoCaptions);
 		timeline.setAutoCaptionSettings(editor.autoCaptionSettings);
+		timeline.setKeystrokes(editor.keystrokes ?? []);
+		if (editor.keystrokeSettings) {
+			timeline.setKeystrokeSettings(editor.keystrokeSettings);
+		}
 		current.setAspectRatio(editor.aspectRatio);
 		exportSettings.setExportEncodingMode(editor.exportEncodingMode);
 		exportSettings.setExportBackendPreference(editor.exportBackendPreference);
@@ -191,12 +198,17 @@ export function useProjectLifecycle(input: Input) {
 		exportSettings.setGifLoop(editor.gifLoop);
 		exportSettings.setGifSizePreset(editor.gifSizePreset);
 		timeline.setSelectedZoomId(null);
+		timeline.setSelectedZoomOutId(null);
 		timeline.setSelectedClipId(null);
 		timeline.setSelectedAnnotationId(null);
 		timeline.setSelectedAudioId(null);
 		refs.nextZoomIdRef.current = deriveNextId(
 			"zoom",
 			editor.zoomRegions.map(({ id }) => id),
+		);
+		refs.nextZoomOutIdRef.current = deriveNextId(
+			"zoom-out",
+			(editor.zoomOutRegions ?? []).map(({ id }) => id),
 		);
 		refs.nextClipIdRef.current = deriveNextId(
 			"clip",
@@ -329,6 +341,7 @@ export function useProjectLifecycle(input: Input) {
 		const current = inputRef.current;
 		const { timeline, refs } = current;
 		timeline.setZoomRegions([]);
+		timeline.setZoomOutRegions([]);
 		timeline.setTrimRegions([]);
 		timeline.setClipRegions([]);
 		refs.clipInitializedRef.current = false;
@@ -344,11 +357,15 @@ export function useProjectLifecycle(input: Input) {
 		timeline.setHasClipSourceAudio(false);
 		timeline.setAutoCaptions([]);
 		timeline.setAutoCaptionSettings((previous) => ({ ...previous, enabled: false }));
+		timeline.setKeystrokes([]);
+		timeline.setKeystrokeSettings(DEFAULT_KEYSTROKE_SETTINGS);
 		timeline.setSelectedZoomId(null);
+		timeline.setSelectedZoomOutId(null);
 		timeline.setSelectedClipId(null);
 		timeline.setSelectedAnnotationId(null);
 		timeline.setSelectedAudioId(null);
 		refs.nextZoomIdRef.current = 1;
+		refs.nextZoomOutIdRef.current = 1;
 		refs.nextClipIdRef.current = 1;
 		refs.nextAudioIdRef.current = 1;
 		refs.nextAnnotationIdRef.current = 1;

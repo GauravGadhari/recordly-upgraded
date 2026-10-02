@@ -24,6 +24,7 @@ import {
 	type ClipRegion,
 	type CropRegion,
 	type CursorClickEffectStyle,
+	type CursorSfxSettings,
 	type CursorStyle,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
@@ -33,15 +34,21 @@ import {
 	DEFAULT_CONNECTED_ZOOM_EASING,
 	DEFAULT_CONNECTED_ZOOM_GAP_MS,
 	DEFAULT_CROP_REGION,
+	DEFAULT_CURSOR_CLICK_DEPTH,
+	MIN_CURSOR_CLICK_DEPTH,
+	MAX_CURSOR_CLICK_DEPTH,
 	DEFAULT_CURSOR_CLICK_EFFECT,
 	DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
 	DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
 	DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
 	DEFAULT_CURSOR_MOTION_BLUR,
+	DEFAULT_CURSOR_SFX_SETTINGS,
 	DEFAULT_CURSOR_STYLE,
 	DEFAULT_CURSOR_SWAY,
 	DEFAULT_FIGURE_DATA,
+	DEFAULT_HIGHLIGHT_DATA,
+	DEFAULT_KEYSTROKE_SETTINGS,
 	DEFAULT_PADDING,
 	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_WEBCAM_MARGIN,
@@ -64,11 +71,18 @@ import {
 	getDefaultCaptionFontFamily,
 	normalizeCursorClickEffectColor,
 	normalizeCursorClickEffectStyle,
+	type KeystrokeEvent,
+	type KeystrokeVisualSettings,
+	type MemeRegion,
 	type Padding,
 	type SpeedRegion,
+	type TransitionRegion,
 	type TrimRegion,
+	type VerticalTrackingMode,
+	DEFAULT_VERTICAL_TRACKING_MODE,
 	type WebcamOverlaySettings,
 	type ZoomMotionBlurTuning,
+	type ZoomOutRegion,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
 } from "./types";
@@ -126,11 +140,14 @@ export interface ProjectEditorState {
 	cursorMotionBlur: number;
 	cursorClickBounce: number;
 	cursorClickBounceDuration: number;
+	cursorClickDepth: number;
 	cursorSway: number;
+	cursorSfx?: CursorSfxSettings;
 	borderRadius: number;
 	padding: Padding;
 	cropRegion: CropRegion;
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	trimRegions: TrimRegion[];
 	clipRegions: ClipRegion[];
 	autoFullTrackClipId?: string | null;
@@ -138,10 +155,15 @@ export interface ProjectEditorState {
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
 	audioRegions: AudioRegion[];
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
 	autoCaptions: CaptionCue[];
 	autoCaptionSettings: AutoCaptionSettings;
+	keystrokes?: KeystrokeEvent[];
+	keystrokeSettings?: KeystrokeVisualSettings;
 	webcam: WebcamOverlaySettings;
 	aspectRatio: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	sourceAudioTrackSettingsByClip?: Record<string, SourceAudioTrackSettings>;
 	defaultSourceAudioTrackSettings?: SourceAudioTrackSettings;
 	exportEncodingMode: ExportEncodingMode;
@@ -448,6 +470,30 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				})
 		: [];
 
+	const normalizedZoomOutRegions: ZoomOutRegion[] = Array.isArray(editor.zoomOutRegions)
+		? editor.zoomOutRegions
+				.filter((region): region is ZoomOutRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
+				.map((region) => {
+					const rawStart = isFiniteNumber(region.startMs)
+						? Math.round(region.startMs)
+						: 0;
+					const rawEnd = isFiniteNumber(region.endMs)
+						? Math.round(region.endMs)
+						: rawStart + 1000;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, rawEnd);
+
+					return {
+						id: region.id,
+						startMs,
+						endMs,
+						label: typeof region.label === "string" ? region.label : undefined,
+					};
+				})
+		: [];
+
 	const normalizedTrimRegions: TrimRegion[] = Array.isArray(editor.trimRegions)
 		? editor.trimRegions
 				.filter((region): region is TrimRegion =>
@@ -624,6 +670,30 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 							: 20,
 						blurColor:
 							typeof region.blurColor === "string" ? region.blurColor : undefined,
+						highlightData: region.highlightData
+							? {
+									...DEFAULT_HIGHLIGHT_DATA,
+									...region.highlightData,
+									fillOpacity: isFiniteNumber(region.highlightData.fillOpacity)
+										? clamp(region.highlightData.fillOpacity, 0, 1)
+										: DEFAULT_HIGHLIGHT_DATA.fillOpacity,
+									borderWidth: isFiniteNumber(region.highlightData.borderWidth)
+										? clamp(region.highlightData.borderWidth, 0, 50)
+										: DEFAULT_HIGHLIGHT_DATA.borderWidth,
+									borderRadius: isFiniteNumber(region.highlightData.borderRadius)
+										? clamp(region.highlightData.borderRadius, 0, 100)
+										: DEFAULT_HIGHLIGHT_DATA.borderRadius,
+									animationSpeed: isFiniteNumber(region.highlightData.animationSpeed)
+										? clamp(region.highlightData.animationSpeed, 0.2, 5)
+										: DEFAULT_HIGHLIGHT_DATA.animationSpeed,
+									glowIntensity: isFiniteNumber(region.highlightData.glowIntensity)
+										? clamp(region.highlightData.glowIntensity, 0, 1)
+										: DEFAULT_HIGHLIGHT_DATA.glowIntensity,
+									spotlightDim: isFiniteNumber(region.highlightData.spotlightDim)
+										? clamp(region.highlightData.spotlightDim, 0, 1)
+										: DEFAULT_HIGHLIGHT_DATA.spotlightDim,
+								}
+							: undefined,
 						trackIndex: isFiniteNumber(region.trackIndex)
 							? Math.max(0, Math.floor(region.trackIndex))
 							: 0,
@@ -658,6 +728,70 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						trackIndex: isFiniteNumber(region.trackIndex)
 							? Math.max(0, Math.floor(region.trackIndex))
 							: 0,
+						label: typeof region.label === "string" ? region.label : undefined,
+						category: typeof region.category === "string" ? region.category : undefined,
+					};
+				})
+		: [];
+
+	const normalizedTransitionRegions: TransitionRegion[] = Array.isArray(
+		(editor as Partial<ProjectEditorState>).transitionRegions,
+	)
+		? ((editor as Partial<ProjectEditorState>).transitionRegions as TransitionRegion[])
+				.filter((region): region is TransitionRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
+				.map((region) => {
+					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
+					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 800;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, rawEnd);
+					return {
+						id: region.id,
+						startMs,
+						endMs,
+						type: region.type || "fade-black",
+						overlayVideoPath: typeof region.overlayVideoPath === "string" ? region.overlayVideoPath : undefined,
+						sfxAudioPath: typeof region.sfxAudioPath === "string" ? region.sfxAudioPath : undefined,
+						name: typeof region.name === "string" ? region.name : undefined,
+						trackIndex: isFiniteNumber(region.trackIndex) ? Math.max(0, Math.floor(region.trackIndex)) : 0,
+					};
+				})
+		: [];
+
+	const normalizedMemeRegions: MemeRegion[] = Array.isArray(
+		(editor as Partial<ProjectEditorState>).memeRegions,
+	)
+		? ((editor as Partial<ProjectEditorState>).memeRegions as MemeRegion[])
+				.filter((region): region is MemeRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
+				.map((region) => {
+					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
+					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 3000;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, rawEnd);
+					return {
+						id: region.id,
+						startMs,
+						endMs,
+						videoPath: typeof region.videoPath === "string" ? region.videoPath : "",
+						name: typeof region.name === "string" ? region.name : "Meme",
+						position: {
+							x: isFiniteNumber(region.position?.x) ? clamp(region.position.x, 0, 100) : 50,
+							y: isFiniteNumber(region.position?.y) ? clamp(region.position.y, 0, 100) : 50,
+						},
+						size: {
+							width: isFiniteNumber(region.size?.width) ? clamp(region.size.width, 5, 100) : 35,
+							height: isFiniteNumber(region.size?.height) ? clamp(region.size.height, 5, 100) : 35,
+						},
+						volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 1) : 1,
+						greenScreen: Boolean(region.greenScreen),
+						chromaKeySimilarity: isFiniteNumber(region.chromaKeySimilarity)
+							? clamp(region.chromaKeySimilarity, 0.05, 0.9)
+							: 0.35,
+						zIndex: isFiniteNumber(region.zIndex) ? region.zIndex : 10,
+						trackIndex: isFiniteNumber(region.trackIndex) ? Math.max(0, Math.floor(region.trackIndex)) : 0,
 					};
 				})
 		: [];
@@ -770,6 +904,71 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			? clamp(rawAutoCaptionSettings.backgroundOpacity, 0, 1)
 			: DEFAULT_AUTO_CAPTION_SETTINGS.backgroundOpacity,
 	};
+
+	const rawKeystrokeSettings: Partial<KeystrokeVisualSettings> =
+		editor.keystrokeSettings && typeof editor.keystrokeSettings === "object"
+			? (editor.keystrokeSettings as Partial<KeystrokeVisualSettings>)
+			: {};
+	const normalizedKeystrokeSettings: KeystrokeVisualSettings = {
+		enabled:
+			typeof rawKeystrokeSettings.enabled === "boolean"
+				? rawKeystrokeSettings.enabled
+				: DEFAULT_KEYSTROKE_SETTINGS.enabled,
+		showShortcutsOnly:
+			typeof rawKeystrokeSettings.showShortcutsOnly === "boolean"
+				? rawKeystrokeSettings.showShortcutsOnly
+				: DEFAULT_KEYSTROKE_SETTINGS.showShortcutsOnly,
+		position:
+			rawKeystrokeSettings.position === "bottom-center" ||
+			rawKeystrokeSettings.position === "bottom-left" ||
+			rawKeystrokeSettings.position === "bottom-right" ||
+			rawKeystrokeSettings.position === "center" ||
+			rawKeystrokeSettings.position === "center-left" ||
+			rawKeystrokeSettings.position === "center-right" ||
+			rawKeystrokeSettings.position === "top-center" ||
+			rawKeystrokeSettings.position === "top-left" ||
+			rawKeystrokeSettings.position === "top-right"
+				? rawKeystrokeSettings.position
+				: DEFAULT_KEYSTROKE_SETTINGS.position,
+		size:
+			rawKeystrokeSettings.size === "small" ||
+			rawKeystrokeSettings.size === "medium" ||
+			rawKeystrokeSettings.size === "large"
+				? rawKeystrokeSettings.size
+				: DEFAULT_KEYSTROKE_SETTINGS.size,
+		style:
+			rawKeystrokeSettings.style === "dark" ||
+			rawKeystrokeSettings.style === "light" ||
+			rawKeystrokeSettings.style === "glass" ||
+			rawKeystrokeSettings.style === "accent"
+				? rawKeystrokeSettings.style
+				: DEFAULT_KEYSTROKE_SETTINGS.style,
+		lingerDurationMs:
+			isFiniteNumber(rawKeystrokeSettings.lingerDurationMs) && rawKeystrokeSettings.lingerDurationMs > 0
+				? rawKeystrokeSettings.lingerDurationMs
+				: DEFAULT_KEYSTROKE_SETTINGS.lingerDurationMs,
+		maxLayers:
+			isFiniteNumber(rawKeystrokeSettings.maxLayers) &&
+			(rawKeystrokeSettings.maxLayers === 1 || rawKeystrokeSettings.maxLayers === 2)
+				? rawKeystrokeSettings.maxLayers
+				: DEFAULT_KEYSTROKE_SETTINGS.maxLayers ?? 2,
+	};
+
+	const normalizedKeystrokes: KeystrokeEvent[] = Array.isArray(
+		(editor as Partial<ProjectEditorState>).keystrokes,
+	)
+		? ((editor as Partial<ProjectEditorState>).keystrokes as KeystrokeEvent[])
+				.filter((k): k is KeystrokeEvent => Boolean(k && typeof k.id === "string"))
+				.map((k) => ({
+					id: k.id,
+					timeMs: isFiniteNumber(k.timeMs) ? Math.max(0, Math.round(k.timeMs)) : 0,
+					durationMs: isFiniteNumber(k.durationMs) ? Math.max(100, Math.round(k.durationMs)) : 1500,
+					keys: Array.isArray(k.keys) ? k.keys.filter((key) => typeof key === "string") : [],
+					displayText: typeof k.displayText === "string" ? k.displayText : "",
+					isShortcut: Boolean(k.isShortcut),
+					enabled: k.enabled !== false,
+				}))
+		: [];
 
 	const rawCropX = isFiniteNumber(editor.cropRegion?.x)
 		? editor.cropRegion.x
@@ -909,9 +1108,63 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		cursorMotionBlur: DEFAULT_CURSOR_MOTION_BLUR,
 		cursorClickBounce: normalizedMotionPreset.cursorClickBounce,
 		cursorClickBounceDuration: normalizedMotionPreset.cursorClickBounceDuration,
+		cursorClickDepth: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorClickDepth)
+			? clamp(
+					(editor as Partial<ProjectEditorState>).cursorClickDepth as number,
+					MIN_CURSOR_CLICK_DEPTH,
+					MAX_CURSOR_CLICK_DEPTH,
+				)
+			: DEFAULT_CURSOR_CLICK_DEPTH,
 		cursorSway: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorSway)
 			? clamp((editor as Partial<ProjectEditorState>).cursorSway as number, 0, 2)
 			: DEFAULT_CURSOR_SWAY,
+		cursorSfx: (editor as Partial<ProjectEditorState>).cursorSfx
+			? {
+					enabled:
+						typeof (editor as Partial<ProjectEditorState>).cursorSfx?.enabled === "boolean"
+							? (editor as Partial<ProjectEditorState>).cursorSfx!.enabled
+							: DEFAULT_CURSOR_SFX_SETTINGS.enabled,
+					clickEnabled:
+						typeof (editor as Partial<ProjectEditorState>).cursorSfx?.clickEnabled === "boolean"
+							? (editor as Partial<ProjectEditorState>).cursorSfx!.clickEnabled
+							: DEFAULT_CURSOR_SFX_SETTINGS.clickEnabled,
+					clickVolume: isFiniteNumber(
+						(editor as Partial<ProjectEditorState>).cursorSfx?.clickVolume,
+					)
+						? clamp((editor as Partial<ProjectEditorState>).cursorSfx!.clickVolume, 0, 1)
+						: DEFAULT_CURSOR_SFX_SETTINGS.clickVolume,
+					clickStyle:
+						(editor as Partial<ProjectEditorState>).cursorSfx?.clickStyle ??
+						DEFAULT_CURSOR_SFX_SETTINGS.clickStyle,
+					dragEnabled:
+						typeof (editor as Partial<ProjectEditorState>).cursorSfx?.dragEnabled === "boolean"
+							? (editor as Partial<ProjectEditorState>).cursorSfx!.dragEnabled
+							: DEFAULT_CURSOR_SFX_SETTINGS.dragEnabled,
+					dragVolume: isFiniteNumber(
+						(editor as Partial<ProjectEditorState>).cursorSfx?.dragVolume,
+					)
+						? clamp((editor as Partial<ProjectEditorState>).cursorSfx!.dragVolume, 0, 1)
+						: DEFAULT_CURSOR_SFX_SETTINGS.dragVolume,
+					dragStyle:
+						(editor as Partial<ProjectEditorState>).cursorSfx?.dragStyle ??
+						DEFAULT_CURSOR_SFX_SETTINGS.dragStyle,
+					whooshEnabled:
+						typeof (editor as Partial<ProjectEditorState>).cursorSfx?.whooshEnabled === "boolean"
+							? (editor as Partial<ProjectEditorState>).cursorSfx!.whooshEnabled
+							: DEFAULT_CURSOR_SFX_SETTINGS.whooshEnabled,
+					whooshVolume: isFiniteNumber(
+						(editor as Partial<ProjectEditorState>).cursorSfx?.whooshVolume,
+					)
+						? clamp((editor as Partial<ProjectEditorState>).cursorSfx!.whooshVolume, 0, 1)
+						: DEFAULT_CURSOR_SFX_SETTINGS.whooshVolume,
+					whooshStyle:
+						(editor as Partial<ProjectEditorState>).cursorSfx?.whooshStyle ??
+						DEFAULT_CURSOR_SFX_SETTINGS.whooshStyle,
+					whooshTriggers:
+						(editor as Partial<ProjectEditorState>).cursorSfx?.whooshTriggers ??
+						DEFAULT_CURSOR_SFX_SETTINGS.whooshTriggers,
+				}
+			: DEFAULT_CURSOR_SFX_SETTINGS,
 		borderRadius: isFiniteNumber(editor.borderRadius)
 			? clamp(editor.borderRadius, 0, 50)
 			: getDefaultBorderRadiusPercent(),
@@ -949,6 +1202,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			height: cropHeight,
 		},
 		zoomRegions: normalizedZoomRegions,
+		zoomOutRegions: normalizedZoomOutRegions,
 		trimRegions: normalizedTrimRegions,
 		clipRegions: normalizedClipRegions,
 		autoFullTrackClipId: normalizedAutoFullTrackClipId,
@@ -956,8 +1210,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		speedRegions: normalizedSpeedRegions,
 		annotationRegions: normalizedAnnotationRegions,
 		audioRegions: normalizedAudioRegions,
+		transitionRegions: normalizedTransitionRegions,
+		memeRegions: normalizedMemeRegions,
 		autoCaptions: normalizedAutoCaptions,
 		autoCaptionSettings: normalizedAutoCaptionSettings,
+		keystrokes: normalizedKeystrokes,
+		keystrokeSettings: normalizedKeystrokeSettings,
 		webcam: {
 			enabled:
 				typeof webcam.enabled === "boolean"
@@ -1058,6 +1316,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				isCustomAspectRatio(editor.aspectRatio))
 				? (editor.aspectRatio as AspectRatio)
 				: "16:9",
+		verticalTrackingMode:
+			editor.verticalTrackingMode === "fit" ? "fit" : DEFAULT_VERTICAL_TRACKING_MODE,
 		exportEncodingMode: normalizeExportEncodingMode(editor.exportEncodingMode),
 		exportBackendPreference: normalizeExportBackendPreference(editor.exportBackendPreference),
 		exportPipelineModel: normalizeExportPipelineModel(editor.exportPipelineModel),

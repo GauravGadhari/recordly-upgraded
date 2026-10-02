@@ -4,10 +4,14 @@ import {
 	AlignRight,
 	TextB as Bold,
 	CaretDown as ChevronDown,
+	Highlighter,
 	ImageSquare as ImageIcon,
 	Info,
 	TextItalic as Italic,
+	Lightning,
+	Sparkle,
 	BoundingBox as SquareDashed,
+	Sun,
 	Trash as Trash2,
 	TextT as Type,
 	TextUnderline as Underline,
@@ -33,7 +37,15 @@ import { cn } from "@/lib/utils";
 import { useScopedT } from "../../contexts/I18nContext";
 import { AddCustomFontDialog } from "./AddCustomFontDialog";
 import { getArrowComponent } from "./ArrowSvgs";
-import type { AnnotationRegion, AnnotationType, ArrowDirection, FigureData } from "./types";
+import {
+	type AnnotationRegion,
+	type AnnotationType,
+	type ArrowDirection,
+	DEFAULT_HIGHLIGHT_DATA,
+	type FigureData,
+	type HighlightAnimationType,
+	type HighlightData,
+} from "./types";
 
 interface AnnotationSettingsPanelProps {
 	annotation: AnnotationRegion;
@@ -43,6 +55,7 @@ interface AnnotationSettingsPanelProps {
 	onFigureDataChange?: (figureData: FigureData) => void;
 	onBlurIntensityChange?: (intensity: number) => void;
 	onBlurColorChange?: (color: string) => void;
+	onHighlightDataChange?: (highlightData: HighlightData) => void;
 	onDelete: () => void;
 }
 
@@ -67,6 +80,7 @@ export function AnnotationSettingsPanel({
 	onFigureDataChange,
 	onBlurIntensityChange,
 	onBlurColorChange,
+	onHighlightDataChange,
 	onDelete,
 }: AnnotationSettingsPanelProps) {
 	const t = useScopedT("editor");
@@ -101,6 +115,132 @@ export function AnnotationSettingsPanel({
 		"#607D8B", // Blue Grey
 		"#795548", // Brown
 	];
+
+	const highlightColorSwatches = [
+		"#FACC15", // Fluorescent Yellow
+		"#10B981", // Emerald Green
+		"#06B6D4", // Electric Cyan
+		"#8B5CF6", // Violet Purple
+		"#EC4899", // Neon Pink
+		"#EF4444", // Bright Red
+		"#F97316", // Orange
+		"#FFFFFF", // Pure White
+	];
+
+	const currentHighlight = annotation.highlightData ?? DEFAULT_HIGHLIGHT_DATA;
+
+	const updateHighlight = (patch: Partial<HighlightData>) => {
+		onHighlightDataChange?.({
+			...currentHighlight,
+			...patch,
+		});
+	};
+
+	const highlightPresets = useMemo(
+		() => [
+			{
+				id: "spotlight",
+				name: t("annotations.presetSpotlight", "Spotlight"),
+				icon: <Sun className="w-4 h-4 text-amber-400" />,
+				data: {
+					color: "#FACC15",
+					fillOpacity: 0.15,
+					borderColor: "#FACC15",
+					borderWidth: 2,
+					borderRadius: 12,
+					borderStyle: "solid" as const,
+					animation: "none" as const,
+					spotlightDim: 0.65,
+					glowIntensity: 0.4,
+				},
+			},
+			{
+				id: "animated-border",
+				name: t("annotations.presetAnimatedBorder", "Marching Ants"),
+				icon: <Lightning className="w-4 h-4 text-cyan-400" />,
+				data: {
+					color: "#06B6D4",
+					fillOpacity: 0.15,
+					borderColor: "#06B6D4",
+					borderWidth: 3,
+					borderRadius: 8,
+					borderStyle: "dashed" as const,
+					animation: "border-line" as const,
+					animationSpeed: 1.2,
+					spotlightDim: 0,
+					glowIntensity: 0.5,
+				},
+			},
+			{
+				id: "neon-glow",
+				name: t("annotations.presetNeonGlow", "Neon Glow"),
+				icon: <Sparkle className="w-4 h-4 text-pink-400" />,
+				data: {
+					color: "#EC4899",
+					fillOpacity: 0.2,
+					borderColor: "#EC4899",
+					borderWidth: 2,
+					borderRadius: 10,
+					borderStyle: "solid" as const,
+					animation: "glow" as const,
+					animationSpeed: 1.0,
+					spotlightDim: 0,
+					glowIntensity: 0.85,
+				},
+			},
+			{
+				id: "blink",
+				name: t("annotations.presetBlink", "Blink Alert"),
+				icon: <Lightning className="w-4 h-4 text-red-400" />,
+				data: {
+					color: "#EF4444",
+					fillOpacity: 0.25,
+					borderColor: "#EF4444",
+					borderWidth: 3,
+					borderRadius: 8,
+					borderStyle: "solid" as const,
+					animation: "blink" as const,
+					animationSpeed: 1.2,
+					spotlightDim: 0,
+					glowIntensity: 0.6,
+				},
+			},
+			{
+				id: "marker",
+				name: t("annotations.presetMarker", "Marker Shade"),
+				icon: <Highlighter className="w-4 h-4 text-yellow-400" />,
+				data: {
+					color: "#FACC15",
+					fillOpacity: 0.35,
+					borderColor: "transparent",
+					borderWidth: 0,
+					borderRadius: 4,
+					borderStyle: "solid" as const,
+					animation: "none" as const,
+					spotlightDim: 0,
+					glowIntensity: 0,
+				},
+			},
+			{
+				id: "shimmer",
+				name: t("annotations.presetShimmer", "Shimmer"),
+				icon: <Sparkle className="w-4 h-4 text-purple-400" />,
+				data: {
+					color: "#8B5CF6",
+					fillOpacity: 0.25,
+					borderColor: "#A78BFA",
+					borderWidth: 2,
+					borderRadius: 10,
+					borderStyle: "solid" as const,
+					animation: "shimmer" as const,
+					animationSpeed: 1.0,
+					spotlightDim: 0,
+					glowIntensity: 0.5,
+				},
+			},
+		],
+		[t],
+	);
 
 	const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
 		const files = event.target.files;
@@ -157,27 +297,27 @@ export function AnnotationSettingsPanel({
 						onValueChange={(value) => onTypeChange(value as AnnotationType)}
 						className="mb-6"
 					>
-						<TabsList className="mb-4 bg-foreground/5 border border-foreground/5 p-1 w-full grid grid-cols-4 h-auto rounded-xl">
+						<TabsList className="mb-4 bg-foreground/5 border border-foreground/5 p-1 w-full grid grid-cols-5 h-auto rounded-xl">
 							<TabsTrigger
 								value="text"
-								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-2"
+								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-1.5 text-xs"
 							>
-								<Type className="w-4 h-4" />
+								<Type className="w-3.5 h-3.5" />
 								{t("annotations.text")}
 							</TabsTrigger>
 							<TabsTrigger
 								value="image"
-								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-2"
+								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-1.5 text-xs"
 							>
-								<ImageIcon className="w-4 h-4" />
+								<ImageIcon className="w-3.5 h-3.5" />
 								{t("annotations.image")}
 							</TabsTrigger>
 							<TabsTrigger
 								value="figure"
-								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-2"
+								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-1.5 text-xs"
 							>
 								<svg
-									className="w-4 h-4"
+									className="w-3.5 h-3.5"
 									viewBox="0 0 24 24"
 									fill="none"
 									stroke="currentColor"
@@ -193,10 +333,17 @@ export function AnnotationSettingsPanel({
 							</TabsTrigger>
 							<TabsTrigger
 								value="blur"
-								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-2"
+								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-1.5 text-xs"
 							>
-								<SquareDashed className="w-4 h-4" />
+								<SquareDashed className="w-3.5 h-3.5" />
 								{t("annotations.blur")}
+							</TabsTrigger>
+							<TabsTrigger
+								value="highlight"
+								className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-muted-foreground py-2 rounded-lg transition-all gap-1.5 text-xs"
+							>
+								<Highlighter className="w-3.5 h-3.5" />
+								{t("annotations.highlight", "Highlight")}
 							</TabsTrigger>
 						</TabsList>
 
@@ -783,6 +930,381 @@ export function AnnotationSettingsPanel({
 										</Popover>
 									</div>
 								</div>
+							</div>
+						</TabsContent>
+
+						<TabsContent value="highlight" className="mt-0 space-y-4">
+							{/* Style Presets */}
+							<div className="space-y-2">
+								<div className="flex items-center justify-between">
+									<label className="text-xs font-semibold text-foreground/90 uppercase tracking-wider block">
+										{t("annotations.highlightPresets", "Style Presets")}
+									</label>
+								</div>
+								<div className="grid grid-cols-3 gap-2">
+									{highlightPresets.map((preset) => (
+										<button
+											key={preset.id}
+											type="button"
+											onClick={() => updateHighlight(preset.data)}
+											className={cn(
+												"p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all text-center group bg-foreground/[0.03] border-foreground/10 hover:bg-foreground/[0.08] hover:border-foreground/25 active:scale-95",
+											)}
+										>
+											<div className="p-1.5 rounded-lg bg-foreground/5 group-hover:scale-110 transition-transform">
+												{preset.icon}
+											</div>
+											<span className="text-[11px] font-medium text-foreground line-clamp-1">
+												{preset.name}
+											</span>
+										</button>
+									))}
+								</div>
+							</div>
+
+							{/* Lighted Area Fill / Shade */}
+							<div className="p-3.5 bg-foreground/5 rounded-xl border border-foreground/10 space-y-3.5">
+								<div className="flex items-center justify-between">
+									<label className="text-xs font-semibold text-foreground/90 uppercase tracking-wider block">
+										{t("annotations.highlightFill", "Lighted Area / Shade")}
+									</label>
+									<span className="text-[11px] text-muted-foreground font-mono">
+										{Math.round((currentHighlight.fillOpacity ?? 0.2) * 100)}%
+									</span>
+								</div>
+
+								{/* Color Swatches + Picker */}
+								<div className="flex items-center flex-wrap gap-2">
+									{highlightColorSwatches.map((hex) => (
+										<button
+											key={hex}
+											type="button"
+											onClick={() => updateHighlight({ color: hex })}
+											className={cn(
+												"w-7 h-7 rounded-full border-2 transition-all flex items-center justify-center",
+												currentHighlight.color.toLowerCase() === hex.toLowerCase()
+													? "border-[#2563EB] scale-110 shadow-sm ring-2 ring-[#2563EB]/40"
+													: "border-transparent hover:scale-105 hover:border-foreground/20",
+											)}
+											style={{ backgroundColor: hex }}
+											title={hex}
+										/>
+									))}
+									<Popover>
+										<PopoverTrigger asChild>
+											<button
+												type="button"
+												className="w-7 h-7 rounded-full border border-foreground/20 flex items-center justify-center overflow-hidden hover:scale-105 transition-all shadow-sm"
+												style={{ backgroundColor: currentHighlight.color }}
+												title="Custom Shade Color"
+											>
+												<div className="w-full h-full bg-gradient-to-tr from-transparent to-black/20" />
+											</button>
+										</PopoverTrigger>
+										<PopoverContent className="w-[260px] p-3 bg-editor-surface-alt border border-foreground/10 rounded-xl shadow-xl">
+											<Block
+												color={currentHighlight.color}
+												colors={colorPalette}
+												onChange={(color) => updateHighlight({ color: color.hex })}
+												style={{ borderRadius: "8px" }}
+											/>
+										</PopoverContent>
+									</Popover>
+								</div>
+
+								{/* Opacity Slider */}
+								<div className="space-y-1.5 pt-1">
+									<div className="flex justify-between items-center text-[11px] text-muted-foreground">
+										<span>
+											{t("annotations.fillOpacity", "Shade Opacity: {{opacity}}%", {
+												opacity: Math.round((currentHighlight.fillOpacity ?? 0.2) * 100),
+											})}
+										</span>
+									</div>
+									<Slider
+										value={[Math.round((currentHighlight.fillOpacity ?? 0.2) * 100)]}
+										min={0}
+										max={100}
+										step={5}
+										onValueChange={([val]) => updateHighlight({ fillOpacity: val / 100 })}
+										className="w-full"
+									/>
+								</div>
+							</div>
+
+							{/* Border Styling */}
+							<div className="p-3.5 bg-foreground/5 rounded-xl border border-foreground/10 space-y-3.5">
+								<div className="flex items-center justify-between">
+									<label className="text-xs font-semibold text-foreground/90 uppercase tracking-wider block">
+										{t("annotations.highlightBorder", "Border Styling")}
+									</label>
+									<span className="text-[11px] text-muted-foreground font-mono">
+										{currentHighlight.borderWidth ?? 2}px
+									</span>
+								</div>
+
+								{/* Border Color Swatches */}
+								<div className="flex items-center flex-wrap gap-2">
+									{highlightColorSwatches.map((hex) => (
+										<button
+											key={hex}
+											type="button"
+											onClick={() => updateHighlight({ borderColor: hex })}
+											className={cn(
+												"w-7 h-7 rounded-full border-2 transition-all flex items-center justify-center",
+												currentHighlight.borderColor.toLowerCase() === hex.toLowerCase()
+													? "border-[#2563EB] scale-110 shadow-sm ring-2 ring-[#2563EB]/40"
+													: "border-transparent hover:scale-105 hover:border-foreground/20",
+											)}
+											style={{ backgroundColor: hex }}
+											title={hex}
+										/>
+									))}
+									<Popover>
+										<PopoverTrigger asChild>
+											<button
+												type="button"
+												className="w-7 h-7 rounded-full border border-foreground/20 flex items-center justify-center overflow-hidden hover:scale-105 transition-all shadow-sm"
+												style={{ backgroundColor: currentHighlight.borderColor }}
+												title="Custom Border Color"
+											>
+												<div className="w-full h-full bg-gradient-to-tr from-transparent to-black/20" />
+											</button>
+										</PopoverTrigger>
+										<PopoverContent className="w-[260px] p-3 bg-editor-surface-alt border border-foreground/10 rounded-xl shadow-xl">
+											<Block
+												color={currentHighlight.borderColor}
+												colors={colorPalette}
+												onChange={(color) =>
+													updateHighlight({ borderColor: color.hex })
+												}
+												style={{ borderRadius: "8px" }}
+											/>
+										</PopoverContent>
+									</Popover>
+								</div>
+
+								{/* Border Width Slider */}
+								<div className="space-y-1.5 pt-1">
+									<div className="flex justify-between items-center text-[11px] text-muted-foreground">
+										<span>
+											{t("annotations.borderThickness", "Thickness: {{width}}px", {
+												width: currentHighlight.borderWidth ?? 2,
+											})}
+										</span>
+									</div>
+									<Slider
+										value={[currentHighlight.borderWidth ?? 2]}
+										min={0}
+										max={16}
+										step={1}
+										onValueChange={([val]) => updateHighlight({ borderWidth: val })}
+										className="w-full"
+									/>
+								</div>
+
+								{/* Border Radius Slider */}
+								<div className="space-y-1.5 pt-1">
+									<div className="flex justify-between items-center text-[11px] text-muted-foreground">
+										<span>
+											{t(
+												"annotations.borderCornerRadius",
+												"Corner Radius: {{radius}}px",
+												{ radius: currentHighlight.borderRadius ?? 8 },
+											)}
+										</span>
+									</div>
+									<Slider
+										value={[currentHighlight.borderRadius ?? 8]}
+										min={0}
+										max={40}
+										step={2}
+										onValueChange={([val]) => updateHighlight({ borderRadius: val })}
+										className="w-full"
+									/>
+								</div>
+
+								{/* Border Style Toggle */}
+								<div className="pt-1">
+									<div className="grid grid-cols-3 gap-1.5">
+										{(["solid", "dashed", "dotted"] as const).map((style) => (
+											<button
+												key={style}
+												type="button"
+												onClick={() => updateHighlight({ borderStyle: style })}
+												className={cn(
+													"py-1.5 px-2 rounded-lg text-xs capitalize font-medium transition-all border",
+													currentHighlight.borderStyle === style
+														? "bg-[#2563EB] text-white border-[#2563EB]"
+														: "bg-foreground/5 border-foreground/10 text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
+												)}
+											>
+												{style}
+											</button>
+										))}
+									</div>
+								</div>
+							</div>
+
+							{/* Animation Effects */}
+							<div className="p-3.5 bg-foreground/5 rounded-xl border border-foreground/10 space-y-3.5">
+								<div className="flex items-center justify-between">
+									<label className="text-xs font-semibold text-foreground/90 uppercase tracking-wider block">
+										{t("annotations.highlightAnimation", "Animation Effect")}
+									</label>
+								</div>
+
+								<div className="grid grid-cols-3 gap-2">
+									{[
+										{
+											id: "none",
+											label: t("annotations.animNone", "Static"),
+											icon: <Info className="w-3.5 h-3.5" />,
+										},
+										{
+											id: "border-line",
+											label: t("annotations.animBorderLine", "Border Line"),
+											icon: <Lightning className="w-3.5 h-3.5 text-cyan-400" />,
+										},
+										{
+											id: "blink",
+											label: t("annotations.animBlink", "Blink / Pulse"),
+											icon: <Lightning className="w-3.5 h-3.5 text-amber-400" />,
+										},
+										{
+											id: "glow",
+											label: t("annotations.animGlow", "Neon Glow"),
+											icon: <Sparkle className="w-3.5 h-3.5 text-pink-400" />,
+										},
+										{
+											id: "shimmer",
+											label: t("annotations.animShimmer", "Shimmer"),
+											icon: <Sparkle className="w-3.5 h-3.5 text-purple-400" />,
+										},
+									].map((item) => (
+										<button
+											key={item.id}
+											type="button"
+											onClick={() =>
+												updateHighlight({
+													animation: item.id as HighlightAnimationType,
+												})
+											}
+											className={cn(
+												"py-2 px-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all border",
+												currentHighlight.animation === item.id
+													? "bg-[#2563EB] text-white border-[#2563EB] shadow-sm"
+													: "bg-foreground/5 border-foreground/10 text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
+											)}
+										>
+											{item.icon}
+											<span>{item.label}</span>
+										</button>
+									))}
+								</div>
+
+								{/* Speed Slider */}
+								{currentHighlight.animation !== "none" && (
+									<div className="space-y-1.5 pt-1">
+										<div className="flex justify-between items-center text-[11px] text-muted-foreground">
+											<span>
+												{t(
+													"annotations.animationSpeed",
+													"Speed: {{speed}}x",
+													{
+														speed: (
+															currentHighlight.animationSpeed || 1
+														).toFixed(1),
+													},
+												)}
+											</span>
+										</div>
+										<Slider
+											value={[currentHighlight.animationSpeed || 1]}
+											min={0.4}
+											max={3.0}
+											step={0.1}
+											onValueChange={([val]) =>
+												updateHighlight({ animationSpeed: val })
+											}
+											className="w-full"
+										/>
+									</div>
+								)}
+
+								{/* Glow Intensity Slider */}
+								{(currentHighlight.animation === "glow" ||
+									(currentHighlight.glowIntensity ?? 0) > 0) && (
+									<div className="space-y-1.5 pt-1">
+										<div className="flex justify-between items-center text-[11px] text-muted-foreground">
+											<span>
+												{t(
+													"annotations.glowIntensity",
+													"Glow Bloom: {{intensity}}%",
+													{
+														intensity: Math.round(
+															(currentHighlight.glowIntensity ?? 0.6) *
+																100,
+														),
+													},
+												)}
+											</span>
+										</div>
+										<Slider
+											value={[
+												Math.round(
+													(currentHighlight.glowIntensity ?? 0.6) * 100,
+												),
+											]}
+											min={10}
+											max={100}
+											step={5}
+											onValueChange={([val]) =>
+												updateHighlight({ glowIntensity: val / 100 })
+											}
+											className="w-full"
+										/>
+									</div>
+								)}
+							</div>
+
+							{/* Outer Spotlight Dimming */}
+							<div className="p-3.5 bg-foreground/5 rounded-xl border border-foreground/10 space-y-3">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<Sun className="w-4 h-4 text-amber-400" />
+										<label className="text-xs font-semibold text-foreground/90 uppercase tracking-wider">
+											{t(
+												"annotations.spotlightDim",
+												"Spotlight Outer Dim: {{dim}}%",
+												{
+													dim: Math.round(
+														(currentHighlight.spotlightDim ?? 0) * 100,
+													),
+												},
+											)}
+										</label>
+									</div>
+									<span className="text-[11px] text-muted-foreground font-mono">
+										{Math.round((currentHighlight.spotlightDim ?? 0) * 100)}%
+									</span>
+								</div>
+								<p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+									{t(
+										"annotations.spotlightDimHelp",
+										"Dims everything outside the highlight box to direct maximum viewer focus.",
+									)}
+								</p>
+								<Slider
+									value={[Math.round((currentHighlight.spotlightDim ?? 0) * 100)]}
+									min={0}
+									max={90}
+									step={5}
+									onValueChange={([val]) =>
+										updateHighlight({ spotlightDim: val / 100 })
+									}
+									className="w-full"
+								/>
 							</div>
 						</TabsContent>
 					</Tabs>

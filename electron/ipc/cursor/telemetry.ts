@@ -167,14 +167,20 @@ export function getCursorCaptureElapsedMs(nowMs = Date.now()) {
 export function getNormalizedCursorPoint() {
 	const fallbackCursor = getScreen().getCursorScreenPoint();
 	const linuxCursorCache = process.platform === "linux" ? linuxCursorScreenPoint : null;
-	const isLinuxCacheFresh = !!linuxCursorCache && Date.now() - linuxCursorCache.updatedAt <= 1000;
+	const isLinuxCacheFresh = !!linuxCursorCache && Date.now() - linuxCursorCache.updatedAt <= 2000;
 
 	const primarySf =
 		process.platform !== "darwin" ? getScreen().getPrimaryDisplay().scaleFactor || 1 : 1;
 
-	const cursor = isLinuxCacheFresh
-		? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
-		: fallbackCursor;
+	// On Linux Wayland, getCursorScreenPoint() always returns (0,0), so we
+	// must never fall back to it.  Use the cached position even if stale —
+	// a slightly outdated real coordinate is always better than (0,0).
+	const cursor =
+		isLinuxCacheFresh
+			? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
+			: linuxCursorCache
+				? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
+				: fallbackCursor;
 
 	const windowBounds = selectedSource?.id?.startsWith("window:") ? selectedWindowBounds : null;
 	if (windowBounds) {
@@ -244,6 +250,18 @@ export function pushCursorSample(
 	interactionType: CursorInteractionType = "move",
 	cursorType?: CursorVisualType,
 ) {
+	const last = activeCursorSamples[activeCursorSamples.length - 1];
+	if (
+		last &&
+		last.timeMs === timeMs &&
+		last.interactionType === interactionType &&
+		last.cursorType === (cursorType ?? currentCursorVisualType) &&
+		Math.abs(last.cx - cx) < 0.0001 &&
+		Math.abs(last.cy - cy) < 0.0001
+	) {
+		return;
+	}
+
 	activeCursorSamples.push({
 		timeMs: Math.max(0, timeMs),
 		cx,

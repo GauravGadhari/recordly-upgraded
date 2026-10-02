@@ -7,6 +7,7 @@ import {
 	type CursorStyle,
 	type CursorTelemetryPoint,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+	DEFAULT_CURSOR_CLICK_DEPTH,
 	DEFAULT_CURSOR_CLICK_EFFECT,
 	DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
@@ -95,6 +96,8 @@ export interface CursorRenderConfig {
 	clickBounce: number;
 	/** Click bounce duration in milliseconds. */
 	clickBounceDuration: number;
+	/** Click depth physical depression multiplier. */
+	clickDepth: number;
 	/** Click effect graphics rendered around the pointer. */
 	clickEffect: CursorClickEffectStyle;
 	/** Click effect base color. */
@@ -118,7 +121,6 @@ const CURSOR_DIRECTIONAL_BLUR_STRENGTH = 2;
 const CURSOR_TIME_DISCONTINUITY_MS = 100;
 const CURSOR_SWAY_SMOOTHING_MULTIPLIER = 0.7;
 const CURSOR_SWAY_SMOOTHING_OFFSET = 0.18;
-const CURSOR_SVG_DROP_SHADOW_FILTER = "drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.35))";
 const CURSOR_SHADOW_COLOR = 0x000000;
 const CURSOR_SHADOW_ALPHA = 0.35;
 const CURSOR_SHADOW_OFFSET_X = 0;
@@ -144,6 +146,7 @@ export const DEFAULT_CURSOR_CONFIG: CursorRenderConfig = {
 	motionBlur: 0,
 	clickBounce: 1,
 	clickBounceDuration: DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+	clickDepth: DEFAULT_CURSOR_CLICK_DEPTH,
 	clickEffect: DEFAULT_CURSOR_CLICK_EFFECT,
 	clickEffectColor: DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	clickEffectScale: DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
@@ -895,8 +898,30 @@ function drawClickEffectGraphics(
 			effectScale,
 			effectOpacity,
 		);
-		graphics.circle(px, py, ripple.radius);
-		graphics.stroke({ width: ripple.strokeWidth, color, alpha: ripple.alpha });
+		if (ripple.radius > 1) {
+			// 1. Translucent filled depth disk (matches user's screenshot)
+			graphics.circle(px, py, ripple.radius);
+			graphics.fill({ color, alpha: ripple.alpha * 0.35 });
+
+			// 2. Crisp outer boundary ring
+			graphics.circle(px, py, ripple.radius);
+			graphics.stroke({
+				width: Math.max(1.6, cursorSize * 0.055),
+				color,
+				alpha: Math.min(1, ripple.alpha * 1.25),
+			});
+
+			// 3. Subtle secondary inner wave for multi-ring ripple
+			const innerRadius = ripple.radius * 0.6;
+			if (innerRadius > 3) {
+				graphics.circle(px, py, innerRadius);
+				graphics.stroke({
+					width: Math.max(1.1, cursorSize * 0.035),
+					color,
+					alpha: ripple.alpha * 0.45,
+				});
+			}
+		}
 		return;
 	}
 
@@ -907,6 +932,45 @@ function drawClickEffectGraphics(
 		graphics.stroke({ width: Math.max(1.25, strokeWidth * 0.68), color, alpha: alpha * 0.28 });
 		graphics.circle(px, py, innerRadius);
 		graphics.stroke({ width: Math.max(1.5, strokeWidth * 0.75), color, alpha: alpha * 0.5 });
+		return;
+	}
+
+	if (effect === "depth") {
+		const eased = 1 - Math.pow(clickProgress, 2.5);
+		const fade = Math.pow(clickProgress, 2);
+		const maxRadius = cursorSize * 2.2 * effectScale;
+		const currentRadius = Math.max(2, eased * maxRadius);
+		const depthAlpha = fade * effectOpacity;
+
+		if (currentRadius > 2) {
+			// 1. Ambient occlusion central depression (soft dark core)
+			const coreRadius = Math.max(4, cursorSize * 0.45 * (1 - clickProgress * 0.5));
+			graphics.circle(px, py, coreRadius);
+			graphics.fill({ color: 0x000000, alpha: depthAlpha * 0.35 });
+
+			// 2. Translucent filled ripple depression disk (as in user screenshot)
+			graphics.circle(px, py, currentRadius);
+			graphics.fill({ color, alpha: depthAlpha * 0.35 });
+
+			// 3. Crisp outer perimeter ring
+			graphics.circle(px, py, currentRadius);
+			graphics.stroke({
+				width: Math.max(2.0, cursorSize * 0.065),
+				color,
+				alpha: Math.min(1, depthAlpha * 1.3),
+			});
+
+			// 4. Secondary echoing ripple ring
+			const innerWaveRadius = currentRadius * 0.62;
+			if (innerWaveRadius > 4) {
+				graphics.circle(px, py, innerWaveRadius);
+				graphics.stroke({
+					width: Math.max(1.2, cursorSize * 0.04),
+					color,
+					alpha: depthAlpha * 0.5,
+				});
+			}
+		}
 		return;
 	}
 
@@ -951,11 +1015,30 @@ function drawClickEffectOnCanvas(
 			effectScale,
 			effectOpacity,
 		);
-		ctx.lineWidth = ripple.strokeWidth;
-		ctx.strokeStyle = `${strokeColor}${ripple.alpha.toFixed(3)})`;
-		ctx.beginPath();
-		ctx.arc(px, py, ripple.radius, 0, Math.PI * 2);
-		ctx.stroke();
+		if (ripple.radius > 1) {
+			// 1. Translucent filled disk
+			ctx.beginPath();
+			ctx.fillStyle = `${strokeColor}${(ripple.alpha * 0.35).toFixed(3)})`;
+			ctx.arc(px, py, ripple.radius, 0, Math.PI * 2);
+			ctx.fill();
+
+			// 2. Crisp outer boundary ring
+			ctx.beginPath();
+			ctx.lineWidth = Math.max(1.6, cursorSize * 0.055);
+			ctx.strokeStyle = `${strokeColor}${Math.min(1, ripple.alpha * 1.25).toFixed(3)})`;
+			ctx.arc(px, py, ripple.radius, 0, Math.PI * 2);
+			ctx.stroke();
+
+			// 3. Subtle secondary inner wave
+			const innerRadius = ripple.radius * 0.6;
+			if (innerRadius > 3) {
+				ctx.beginPath();
+				ctx.lineWidth = Math.max(1.1, cursorSize * 0.035);
+				ctx.strokeStyle = `${strokeColor}${(ripple.alpha * 0.45).toFixed(3)})`;
+				ctx.arc(px, py, innerRadius, 0, Math.PI * 2);
+				ctx.stroke();
+			}
+		}
 		ctx.restore();
 		return;
 	}
@@ -973,6 +1056,48 @@ function drawClickEffectOnCanvas(
 		ctx.beginPath();
 		ctx.arc(px, py, innerRadius, 0, Math.PI * 2);
 		ctx.stroke();
+		ctx.restore();
+		return;
+	}
+
+	if (effect === "depth") {
+		const eased = 1 - Math.pow(clickProgress, 2.5);
+		const fade = Math.pow(clickProgress, 2);
+		const maxRadius = cursorSize * 2.2 * effectScale;
+		const currentRadius = Math.max(2, eased * maxRadius);
+		const depthAlpha = fade * effectOpacity;
+
+		if (currentRadius > 2) {
+			// 1. Ambient occlusion central depression (soft dark core)
+			const coreRadius = Math.max(4, cursorSize * 0.45 * (1 - clickProgress * 0.5));
+			ctx.beginPath();
+			ctx.fillStyle = `rgba(0, 0, 0, ${(depthAlpha * 0.35).toFixed(3)})`;
+			ctx.arc(px, py, coreRadius, 0, Math.PI * 2);
+			ctx.fill();
+
+			// 2. Translucent filled ripple depression disk
+			ctx.beginPath();
+			ctx.fillStyle = `${strokeColor}${(depthAlpha * 0.35).toFixed(3)})`;
+			ctx.arc(px, py, currentRadius, 0, Math.PI * 2);
+			ctx.fill();
+
+			// 3. Crisp outer perimeter ring
+			ctx.beginPath();
+			ctx.lineWidth = Math.max(2.0, cursorSize * 0.065);
+			ctx.strokeStyle = `${strokeColor}${Math.min(1, depthAlpha * 1.3).toFixed(3)})`;
+			ctx.arc(px, py, currentRadius, 0, Math.PI * 2);
+			ctx.stroke();
+
+			// 4. Secondary echoing ripple ring
+			const innerWaveRadius = currentRadius * 0.62;
+			if (innerWaveRadius > 4) {
+				ctx.beginPath();
+				ctx.lineWidth = Math.max(1.2, cursorSize * 0.04);
+				ctx.strokeStyle = `${strokeColor}${(depthAlpha * 0.5).toFixed(3)})`;
+				ctx.arc(px, py, innerWaveRadius, 0, Math.PI * 2);
+				ctx.stroke();
+			}
+		}
 		ctx.restore();
 		return;
 	}
@@ -996,6 +1121,22 @@ function drawClickEffectOnCanvas(
 	ctx.restore();
 }
 
+export function computeClickDepthIntensity(ageMs: number, durationMs: number): number {
+	if (ageMs < 0 || ageMs > durationMs || durationMs <= 0) {
+		return 0;
+	}
+	const norm = ageMs / durationMs;
+	const attackEnd = 0.28;
+	if (norm < attackEnd) {
+		// Fast mechanical switch depression attack: 0 -> 1
+		const u = norm / attackEnd;
+		return Math.sin(u * Math.PI * 0.5);
+	}
+	// Smooth tactile spring release: 1 -> 0
+	const u = (norm - attackEnd) / (1 - attackEnd);
+	return Math.pow(1 - u, 2.2);
+}
+
 function getCursorVisualState(
 	samples: CursorTelemetryPoint[],
 	timeMs: number,
@@ -1016,12 +1157,17 @@ function getCursorVisualState(
 		latestClick && isClickEvent && ageMs <= clickBounceDuration
 			? 1 - ageMs / clickBounceDuration
 			: 0;
+	const clickDepthIntensity =
+		latestClick && isClickEvent && ageMs <= clickBounceDuration
+			? computeClickDepthIntensity(ageMs, clickBounceDuration)
+			: 0;
 
 	return {
 		cursorType: findLatestStableCursorType(samples, timeMs),
 		interactionType,
 		clickSample: latestClick && isClickEvent ? latestClick : null,
 		clickBounceProgress,
+		clickDepthIntensity,
 		clickProgress:
 			latestClick &&
 			isClickEvent &&
@@ -1123,6 +1269,7 @@ export class SmoothedCursorState {
 
 export class PixiCursorOverlay {
 	public readonly container: Container;
+	private clickDepthGraphics: Graphics;
 	private clickRingGraphics: Graphics;
 	private customCursorShadowSprite: Sprite;
 	private customCursorShadowFilter: BlurFilter;
@@ -1153,6 +1300,7 @@ export class PixiCursorOverlay {
 		this.container = new Container();
 		this.container.label = "cursor-overlay";
 
+		this.clickDepthGraphics = new Graphics();
 		this.clickRingGraphics = new Graphics();
 		const initialCustomAsset = getCursorStyleAsset("figma");
 		this.customCursorShadowSprite = new Sprite(initialCustomAsset.texture);
@@ -1204,6 +1352,7 @@ export class PixiCursorOverlay {
 		this.container.filters = null;
 
 		this.container.addChild(
+			this.clickDepthGraphics,
 			this.clickRingGraphics,
 			this.customCursorShadowSprite,
 			...Object.values(this.cursorShadowSprites),
@@ -1212,6 +1361,10 @@ export class PixiCursorOverlay {
 		);
 		this.setMotionBlur(this.config.motionBlur);
 		this.setStyle(this.config.style);
+	}
+
+	setClickDepth(clickDepth: number) {
+		this.config.clickDepth = clickDepth;
 	}
 
 	setDotRadius(dotRadius: number) {
@@ -1331,6 +1484,7 @@ export class PixiCursorOverlay {
 		if (samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) {
 			this.container.visible = false;
 			this.cursorVisible = false;
+			this.clickDepthGraphics.clear();
 			this.clickRingGraphics.clear();
 			this.lastRenderedPoint = null;
 			this.lastRenderedTimeMs = null;
@@ -1348,10 +1502,12 @@ export class PixiCursorOverlay {
 			return;
 		}
 
+		const hasValidTelemetry = samples.some((s) => s.cx > 0.001 || s.cy > 0.001);
 		const target = interpolateCursorPosition(samples, timeMs);
-		if (!target) {
+		if (!target || !hasValidTelemetry) {
 			this.container.visible = false;
 			this.cursorVisible = false;
+			this.clickDepthGraphics.clear();
 			this.clickRingGraphics.clear();
 			return;
 		}
@@ -1361,13 +1517,18 @@ export class PixiCursorOverlay {
 		const h =
 			this.config.dotRadius *
 			getCursorViewportScale(viewport.width, this.config.minViewportScale);
-		const { cursorType, clickSample, clickBounceProgress, clickProgress } =
-			getCursorVisualState(
-				samples,
-				timeMs,
-				this.config.clickBounceDuration,
-				this.config.clickEffectDurationMs,
-			);
+		const {
+			cursorType,
+			clickSample,
+			clickBounceProgress,
+			clickDepthIntensity,
+			clickProgress,
+		} = getCursorVisualState(
+			samples,
+			timeMs,
+			this.config.clickBounceDuration,
+			this.config.clickEffectDurationMs,
+		);
 		const projectedClickSample = clickSample
 			? projectCursorPositionToViewport(clickSample, viewport.sourceCrop)
 			: null;
@@ -1380,14 +1541,16 @@ export class PixiCursorOverlay {
 				? viewport.y + projectedClickSample.cy * viewport.height
 				: viewport.y + projectedTarget.cy * viewport.height;
 		const shouldShowCursorSprite = visible && projectedTarget.visible;
+		const effectiveDepth = this.config.clickDepth * clickDepthIntensity;
 		const shouldDrawClickEffect =
-			this.config.clickEffect !== "none" &&
-			clickProgress > 0 &&
+			((this.config.clickEffect !== "none" && clickProgress > 0) ||
+				(effectiveDepth > 0.02)) &&
 			Boolean(projectedClickSample?.visible);
 
 		if (!shouldShowCursorSprite && !shouldDrawClickEffect) {
 			this.container.visible = false;
 			this.cursorVisible = false;
+			this.clickDepthGraphics.clear();
 			this.clickRingGraphics.clear();
 			this.customCursorShadowSprite.visible = false;
 			this.customCursorSprite.visible = false;
@@ -1446,8 +1609,43 @@ export class PixiCursorOverlay {
 			0.72,
 			1 - Math.sin(clickBounceProgress * Math.PI) * (0.08 * this.config.clickBounce),
 		);
+		const depthScaleCompression = 1 - 0.11 * Math.min(1.5, effectiveDepth);
+		const currentDrawScale = bounceScale * depthScaleCompression;
 		const scaledH = h * getCursorStyleSizeMultiplier(this.config.style);
 		const swayRotation = this.updateCursorSway(px, py, timeMs, shouldFreezeCursorMotion);
+
+		// Contact shadow dynamics
+		const shadowDepthClamp = Math.min(1.2, effectiveDepth);
+		const currentShadowOffsetY =
+			CURSOR_SHADOW_OFFSET_Y * Math.max(0, 1 - 0.85 * shadowDepthClamp);
+		const currentShadowOffsetX =
+			CURSOR_SHADOW_OFFSET_X + 0.3 * shadowDepthClamp;
+		const currentShadowBlur = Math.max(
+			0.6,
+			CURSOR_SHADOW_BLUR * (1 - 0.75 * shadowDepthClamp),
+		);
+		const currentShadowAlpha = Math.min(
+			0.68,
+			CURSOR_SHADOW_ALPHA + 0.28 * shadowDepthClamp,
+		);
+		const contactDisplacementX = 0.5 * shadowDepthClamp;
+		const contactDisplacementY = 0.8 * shadowDepthClamp;
+
+		this.clickDepthGraphics.clear();
+		if (
+			this.config.clickEffect !== "depth" &&
+			this.config.clickEffect !== "ripple" &&
+			effectiveDepth > 0.02 &&
+			Boolean(projectedClickSample?.visible)
+		) {
+			const depthFactor = Math.min(1.5, effectiveDepth);
+			const indentRadius = Math.max(6, scaledH * 0.32 * depthFactor);
+			const indentAlpha = Math.min(0.4, depthFactor * 0.35);
+
+			// Soft subtle ambient contact occlusion under pointer
+			this.clickDepthGraphics.circle(clickEffectPx, clickEffectPy, indentRadius);
+			this.clickDepthGraphics.fill({ color: 0x000000, alpha: indentAlpha * 0.2 });
+		}
 
 		drawClickEffectGraphics(
 			this.clickRingGraphics,
@@ -1487,17 +1685,25 @@ export class PixiCursorOverlay {
 			}
 
 			if (shadowSprite) {
-				shadowSprite.height = scaledH * bounceScale;
-				shadowSprite.width = scaledH * bounceScale * asset.aspectRatio;
-				shadowSprite.position.set(px + CURSOR_SHADOW_OFFSET_X, py + CURSOR_SHADOW_OFFSET_Y);
+				const activeShadowFilter = this.cursorShadowFilters[spriteKey];
+				if (activeShadowFilter) {
+					activeShadowFilter.blur = currentShadowBlur;
+				}
+				shadowSprite.alpha = currentShadowAlpha;
+				shadowSprite.height = scaledH * currentDrawScale;
+				shadowSprite.width = scaledH * currentDrawScale * asset.aspectRatio;
+				shadowSprite.position.set(
+					px + currentShadowOffsetX,
+					py + currentShadowOffsetY,
+				);
 				shadowSprite.rotation = swayRotation;
 			}
 
 			if (sprite) {
 				sprite.alpha = this.config.dotAlpha;
-				sprite.height = scaledH * bounceScale;
-				sprite.width = scaledH * bounceScale * asset.aspectRatio;
-				sprite.position.set(px, py);
+				sprite.height = scaledH * currentDrawScale;
+				sprite.width = scaledH * currentDrawScale * asset.aspectRatio;
+				sprite.position.set(px + contactDisplacementX, py + contactDisplacementY);
 				sprite.rotation = swayRotation;
 			}
 		} else if (shouldShowCursorSprite) {
@@ -1517,11 +1723,13 @@ export class PixiCursorOverlay {
 			this.customCursorShadowSprite.anchor.set(asset.anchorX, asset.anchorY);
 			this.customCursorShadowSprite.visible = showSeparateShadow;
 			if (showSeparateShadow) {
-				this.customCursorShadowSprite.height = scaledH * bounceScale;
-				this.customCursorShadowSprite.width = scaledH * bounceScale * asset.aspectRatio;
+				this.customCursorShadowFilter.blur = currentShadowBlur;
+				this.customCursorShadowSprite.alpha = currentShadowAlpha;
+				this.customCursorShadowSprite.height = scaledH * currentDrawScale;
+				this.customCursorShadowSprite.width = scaledH * currentDrawScale * asset.aspectRatio;
 				this.customCursorShadowSprite.position.set(
-					px + CURSOR_SHADOW_OFFSET_X,
-					py + CURSOR_SHADOW_OFFSET_Y,
+					px + currentShadowOffsetX,
+					py + currentShadowOffsetY,
 				);
 				this.customCursorShadowSprite.rotation = swayRotation;
 			}
@@ -1530,9 +1738,9 @@ export class PixiCursorOverlay {
 			this.customCursorSprite.anchor.set(asset.anchorX, asset.anchorY);
 			this.customCursorSprite.visible = true;
 			this.customCursorSprite.alpha = this.config.dotAlpha;
-			this.customCursorSprite.height = scaledH * bounceScale;
-			this.customCursorSprite.width = scaledH * bounceScale * asset.aspectRatio;
-			this.customCursorSprite.position.set(px, py);
+			this.customCursorSprite.height = scaledH * currentDrawScale;
+			this.customCursorSprite.width = scaledH * currentDrawScale * asset.aspectRatio;
+			this.customCursorSprite.position.set(px + contactDisplacementX, py + contactDisplacementY);
 			this.customCursorSprite.rotation = swayRotation;
 		}
 
@@ -1625,6 +1833,7 @@ export class PixiCursorOverlay {
 	}
 
 	destroy(): void {
+		this.clickDepthGraphics.destroy();
 		this.clickRingGraphics.destroy();
 		this.customCursorShadowFilter.destroy();
 		for (const shadowFilter of Object.values(this.cursorShadowFilters)) {
@@ -1643,7 +1852,13 @@ export function drawCursorOnCanvas(
 	smoothedState: SmoothedCursorState,
 	config: CursorRenderConfig = DEFAULT_CURSOR_CONFIG,
 ): void {
-	if (samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) return;
+	if (
+		samples.length === 0 ||
+		viewport.width <= 0 ||
+		viewport.height <= 0 ||
+		!samples.some((s) => s.cx > 0.001 || s.cy > 0.001)
+	)
+		return;
 
 	const target = interpolateCursorPosition(samples, timeMs);
 	if (!target) return;
@@ -1656,7 +1871,13 @@ export function drawCursorOnCanvas(
 	const px = viewport.x + smoothedState.x * viewport.width;
 	const py = viewport.y + smoothedState.y * viewport.height;
 	const h = config.dotRadius * getCursorViewportScale(viewport.width, config.minViewportScale);
-	const { cursorType, clickSample, clickBounceProgress, clickProgress } = getCursorVisualState(
+	const {
+		cursorType,
+		clickSample,
+		clickBounceProgress,
+		clickDepthIntensity,
+		clickProgress,
+	} = getCursorVisualState(
 		samples,
 		timeMs,
 		config.clickBounceDuration,
@@ -1685,8 +1906,30 @@ export function drawCursorOnCanvas(
 		0.72,
 		1 - Math.sin(clickBounceProgress * Math.PI) * (0.08 * config.clickBounce),
 	);
+	const effectiveDepth = config.clickDepth * clickDepthIntensity;
+	const depthScaleCompression = 1 - 0.11 * Math.min(1.5, effectiveDepth);
 	const effectHeight = h * getCursorStyleSizeMultiplier(config.style);
-	const drawHeight = effectHeight * bounceScale;
+	const drawHeight = effectHeight * bounceScale * depthScaleCompression;
+
+	// Surface contact indentation on canvas if not depth or ripple click effect
+	if (
+		config.clickEffect !== "depth" &&
+		config.clickEffect !== "ripple" &&
+		effectiveDepth > 0.02 &&
+		projectedClickSample?.visible
+	) {
+		const depthFactor = Math.min(1.5, effectiveDepth);
+		const indentRadius = Math.max(6, effectHeight * 0.32 * depthFactor);
+		const indentAlpha = Math.min(0.4, depthFactor * 0.35);
+
+		ctx.save();
+		ctx.fillStyle = `rgba(0, 0, 0, ${(indentAlpha * 0.2).toFixed(3)})`;
+		ctx.beginPath();
+		ctx.arc(clickEffectPx, clickEffectPy, indentRadius, 0, Math.PI * 2);
+		ctx.fill();
+		ctx.restore();
+	}
+
 	drawClickEffectOnCanvas(
 		ctx,
 		config.clickEffect,
@@ -1699,16 +1942,41 @@ export function drawCursorOnCanvas(
 		config.clickEffectColor,
 	);
 
+	const shadowDepthClamp = Math.min(1.2, effectiveDepth);
+	const currentShadowOffsetY =
+		CURSOR_SHADOW_OFFSET_Y * Math.max(0, 1 - 0.85 * shadowDepthClamp);
+	const currentShadowOffsetX =
+		CURSOR_SHADOW_OFFSET_X + 0.3 * shadowDepthClamp;
+	const currentShadowBlur = Math.max(
+		0.6,
+		CURSOR_SHADOW_BLUR * (1 - 0.75 * shadowDepthClamp),
+	);
+	const currentShadowAlpha = Math.min(
+		0.68,
+		CURSOR_SHADOW_ALPHA + 0.28 * shadowDepthClamp,
+	);
+	const contactDisplacementX = 0.5 * shadowDepthClamp;
+	const contactDisplacementY = 0.8 * shadowDepthClamp;
+
 	ctx.save();
 	if (config.style !== "figma") {
-		ctx.filter = CURSOR_SVG_DROP_SHADOW_FILTER;
+		ctx.shadowColor = `rgba(0, 0, 0, ${currentShadowAlpha.toFixed(3)})`;
+		ctx.shadowBlur = currentShadowBlur;
+		ctx.shadowOffsetX = currentShadowOffsetX;
+		ctx.shadowOffsetY = currentShadowOffsetY;
 	}
 
 	const drawWidth = drawHeight * asset.aspectRatio;
 	const hotspotX = asset.anchorX * drawWidth;
 	const hotspotY = asset.anchorY * drawHeight;
 	ctx.globalAlpha = config.dotAlpha;
-	ctx.drawImage(asset.image, px - hotspotX, py - hotspotY, drawWidth, drawHeight);
+	ctx.drawImage(
+		asset.image,
+		px + contactDisplacementX - hotspotX,
+		py + contactDisplacementY - hotspotY,
+		drawWidth,
+		drawHeight,
+	);
 
 	ctx.restore();
 }

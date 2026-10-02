@@ -83,4 +83,41 @@ describe("resolveMediaElementSource", () => {
 			vi.unstubAllGlobals();
 		}
 	});
+
+	it("resolves bundled asset paths through getAssetPath", async () => {
+		const getAssetBasePath = vi.fn(async () => "file:///opt/Recordly/resources/assets");
+		Object.assign(globalThis, {
+			window: {
+				electronAPI: {
+					readLocalFile,
+					getLocalMediaUrl,
+					getAssetBasePath,
+				},
+				location: { protocol: "file:" },
+			},
+		});
+
+		const result = await resolveMediaElementSource("/sfx/click-crisp.mp3");
+		expect(result.src).toBe("file:///opt/Recordly/resources/assets/sfx/click-crisp.mp3");
+	});
+});
+
+describe("loadMediaArrayBuffer", () => {
+	it("decodes data URLs directly to ArrayBuffer without fetch", async () => {
+		const { loadMediaArrayBuffer } = await import("./localMediaSource");
+		// Create a small base64 string
+		const testBytes = new Uint8Array([10, 20, 30, 40, 50]);
+		const binary = String.fromCharCode(...testBytes);
+		const dataUrl = `data:audio/wav;base64,${btoa(binary)}`;
+
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		try {
+			const buffer = await loadMediaArrayBuffer(dataUrl);
+			expect(fetchMock).not.toHaveBeenCalled();
+			expect(new Uint8Array(buffer)).toEqual(testBytes);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 });

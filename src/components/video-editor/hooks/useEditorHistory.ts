@@ -14,6 +14,7 @@ import { cloneStructured } from "../videoEditorUtils";
 type Input = {
 	timeline: ReturnType<typeof useTimelineState>;
 	nextZoomIdRef: MutableRefObject<number>;
+	nextZoomOutIdRef: MutableRefObject<number>;
 	nextClipIdRef: MutableRefObject<number>;
 	nextAnnotationIdRef: MutableRefObject<number>;
 	nextAudioIdRef: MutableRefObject<number>;
@@ -23,6 +24,7 @@ type Input = {
 export function useEditorHistory({
 	timeline,
 	nextZoomIdRef,
+	nextZoomOutIdRef,
 	nextClipIdRef,
 	nextAnnotationIdRef,
 	nextAudioIdRef,
@@ -30,22 +32,26 @@ export function useEditorHistory({
 }: Input) {
 	const {
 		zoomRegions,
+		zoomOutRegions,
 		clipRegions,
 		speedRegions,
 		annotationRegions,
 		audioRegions,
 		autoCaptions,
 		selectedZoomId,
+		selectedZoomOutId,
 		selectedClipId,
 		selectedAnnotationId,
 		selectedAudioId,
 		setZoomRegions,
+		setZoomOutRegions,
 		setClipRegions,
 		setSpeedRegions,
 		setAnnotationRegions,
 		setAudioRegions,
 		setAutoCaptions,
 		setSelectedZoomId,
+		setSelectedZoomOutId,
 		setSelectedClipId,
 		setSelectedAnnotationId,
 		setSelectedAudioId,
@@ -65,24 +71,28 @@ export function useEditorHistory({
 	const buildSnapshot = useCallback(
 		(): EditorHistorySnapshot => ({
 			zoomRegions,
+			zoomOutRegions,
 			clipRegions,
 			speedRegions,
 			annotationRegions,
 			audioRegions,
 			autoCaptions,
 			selectedZoomId,
+			selectedZoomOutId,
 			selectedClipId,
 			selectedAnnotationId,
 			selectedAudioId,
 		}),
 		[
 			zoomRegions,
+			zoomOutRegions,
 			clipRegions,
 			speedRegions,
 			annotationRegions,
 			audioRegions,
 			autoCaptions,
 			selectedZoomId,
+			selectedZoomOutId,
 			selectedClipId,
 			selectedAnnotationId,
 			selectedAudioId,
@@ -93,18 +103,24 @@ export function useEditorHistory({
 			applyingRef.current = true;
 			const cloned = cloneStructured(snapshot);
 			setZoomRegions(cloned.zoomRegions);
+			setZoomOutRegions(cloned.zoomOutRegions ?? []);
 			setClipRegions(cloned.clipRegions);
 			setSpeedRegions(cloned.speedRegions);
 			setAnnotationRegions(cloned.annotationRegions);
 			setAudioRegions(cloned.audioRegions);
 			setAutoCaptions(cloned.autoCaptions);
 			setSelectedZoomId(cloned.selectedZoomId);
+			setSelectedZoomOutId(cloned.selectedZoomOutId ?? null);
 			setSelectedClipId(cloned.selectedClipId);
 			setSelectedAnnotationId(cloned.selectedAnnotationId);
 			setSelectedAudioId(cloned.selectedAudioId);
 			nextZoomIdRef.current = deriveNextId(
 				"zoom",
 				cloned.zoomRegions.map(({ id }) => id),
+			);
+			nextZoomOutIdRef.current = deriveNextId(
+				"zoom-out",
+				(cloned.zoomOutRegions ?? []).map(({ id }) => id),
 			);
 			nextClipIdRef.current = deriveNextId(
 				"clip",
@@ -124,16 +140,19 @@ export function useEditorHistory({
 		},
 		[
 			setZoomRegions,
+			setZoomOutRegions,
 			setClipRegions,
 			setSpeedRegions,
 			setAnnotationRegions,
 			setAudioRegions,
 			setAutoCaptions,
 			setSelectedZoomId,
+			setSelectedZoomOutId,
 			setSelectedClipId,
 			setSelectedAnnotationId,
 			setSelectedAudioId,
 			nextZoomIdRef,
+			nextZoomOutIdRef,
 			nextClipIdRef,
 			nextAnnotationIdRef,
 			nextAudioIdRef,

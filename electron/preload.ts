@@ -220,6 +220,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	listAssetDirectory: (relativeDir: string) => {
 		return ipcRenderer.invoke("list-asset-directory", relativeDir);
 	},
+	listMediaSounds: (options?: { category?: string; search?: string }) => {
+		return ipcRenderer.invoke("list-media-library-sounds", options);
+	},
+	listMediaTransitions: () => {
+		return ipcRenderer.invoke("list-media-library-transitions");
+	},
+	listMediaMemes: (options?: { category?: string; search?: string }) => {
+		return ipcRenderer.invoke("list-media-library-memes", options);
+	},
+	pickMediaFile: (type: "sound" | "transition" | "meme") => {
+		return ipcRenderer.invoke("show-media-file-picker", type);
+	},
+	getMediaPreviewVideo: (filePath: string) => {
+		return ipcRenderer.invoke("get-media-preview-video", filePath) as Promise<{
+			success: boolean;
+			previewPath?: string;
+			url?: string;
+			error?: string;
+		}>;
+	},
 	readLocalFile: (filePath: string) => {
 		return ipcRenderer.invoke("read-local-file", filePath);
 	},
@@ -602,8 +622,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getRecordedVideoPath: () => {
 		return ipcRenderer.invoke("get-recorded-video-path");
 	},
-	setRecordingState: (recording: boolean) => {
-		return ipcRenderer.invoke("set-recording-state", recording);
+	setRecordingState: (recording: boolean, options?: { startTimeMs?: number }) => {
+		return ipcRenderer.invoke("set-recording-state", recording, options);
+	},
+	warmupCursorMonitor: () => {
+		return ipcRenderer.invoke("warmup-cursor-monitor") as Promise<{ success: boolean; error?: string }>;
 	},
 	setCursorScale: (scale: number) => {
 		return ipcRenderer.invoke("set-cursor-scale", scale);
@@ -613,6 +636,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	setCursorTelemetry: (videoPath: string | undefined, samples: CursorTelemetryPoint[]) => {
 		return ipcRenderer.invoke("set-cursor-telemetry", videoPath, samples);
+	},
+	getKeystrokes: (videoPath?: string) => {
+		return ipcRenderer.invoke("get-keystrokes", videoPath);
+	},
+	setKeystrokes: (videoPath: string | undefined, events: unknown[]) => {
+		return ipcRenderer.invoke("set-keystrokes", videoPath, events);
 	},
 	getSystemCursorAssets: () => {
 		return ipcRenderer.invoke("get-system-cursor-assets");
@@ -995,6 +1024,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	isNativeWindowsCaptureAvailable: () =>
 		ipcRenderer.invoke("is-native-windows-capture-available"),
+	isNativeLinuxCaptureAvailable: () =>
+		ipcRenderer.invoke("is-native-linux-capture-available"),
 	muxNativeWindowsRecording: (expectedDurationMs?: number) =>
 		ipcRenderer.invoke("mux-native-windows-recording", expectedDurationMs),
 	hideOsCursor: () => ipcRenderer.invoke("hide-cursor"),

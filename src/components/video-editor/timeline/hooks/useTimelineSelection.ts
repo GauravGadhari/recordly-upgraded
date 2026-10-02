@@ -5,24 +5,34 @@ interface UseTimelineSelectionParams {
 	totalMs: number;
 	currentTimeMs: number;
 	zoomRegions: TimelineRegion[];
+	zoomOutRegions?: TimelineRegion[];
 	clipRegions: TimelineRegion[];
 	annotationRegions: (TimelineRegion & { zIndex: number })[];
 	audioRegions: TimelineRegion[];
 	selectedZoomId: string | null;
+	selectedZoomOutId?: string | null;
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
 	selectedAudioId?: string | null;
 	selectedCaptionId?: string | null;
+	selectedTransitionId?: string | null;
+	selectedMemeId?: string | null;
 	onZoomDelete: (id: string) => void;
+	onZoomOutDelete?: (id: string) => void;
 	onClipDelete?: (id: string) => void;
 	onAnnotationDelete?: (id: string) => void;
 	onAudioDelete?: (id: string) => void;
 	onCaptionDelete?: (id: string) => void;
+	onTransitionDelete?: (id: string) => void;
+	onMemeDelete?: (id: string) => void;
 	onSelectZoom: (id: string | null) => void;
+	onSelectZoomOut?: (id: string | null) => void;
 	onSelectClip?: (id: string | null) => void;
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
 	onSelectCaption?: (id: string | null) => void;
+	onSelectTransition?: (id: string | null) => void;
+	onSelectMeme?: (id: string | null) => void;
 }
 
 export function useTimelineSelection({
@@ -30,21 +40,31 @@ export function useTimelineSelection({
 	currentTimeMs,
 	zoomRegions,
 	annotationRegions,
+	zoomOutRegions = [],
 	selectedZoomId,
+	selectedZoomOutId,
 	selectedClipId,
 	selectedAnnotationId,
 	selectedAudioId,
 	selectedCaptionId,
+	selectedTransitionId,
+	selectedMemeId,
 	onZoomDelete,
+	onZoomOutDelete,
 	onClipDelete,
 	onAnnotationDelete,
 	onAudioDelete,
 	onCaptionDelete,
+	onTransitionDelete,
+	onMemeDelete,
 	onSelectZoom,
+	onSelectZoomOut,
 	onSelectClip,
 	onSelectAnnotation,
 	onSelectAudio,
 	onSelectCaption,
+	onSelectTransition,
+	onSelectMeme,
 }: UseTimelineSelectionParams) {
 	const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
 	const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
@@ -89,6 +109,8 @@ export function useTimelineSelection({
 		onSelectAnnotation?.(null);
 		onSelectAudio?.(null);
 		onSelectCaption?.(null);
+		onSelectTransition?.(null);
+		onSelectMeme?.(null);
 		setSelectAllBlocksActive(false);
 	}, [
 		selectAllBlocksActive,
@@ -96,10 +118,31 @@ export function useTimelineSelection({
 		onZoomDelete,
 		selectedZoomId,
 		onSelectZoom,
+		onSelectZoomOut,
 		onSelectClip,
 		onSelectAnnotation,
 		onSelectAudio,
 		onSelectCaption,
+		onSelectTransition,
+		onSelectMeme,
+	]);
+
+	const deleteSelectedZoomOut = useCallback(() => {
+		if (selectAllBlocksActive) {
+			zoomOutRegions.map((region) => region.id).forEach((id) => onZoomOutDelete?.(id));
+		} else if (selectedZoomOutId) {
+			onZoomOutDelete?.(selectedZoomOutId);
+		} else {
+			return;
+		}
+
+		onSelectZoomOut?.(null);
+	}, [
+		selectAllBlocksActive,
+		zoomOutRegions,
+		selectedZoomOutId,
+		onZoomOutDelete,
+		onSelectZoomOut,
 	]);
 
 	const deleteSelectedClip = useCallback(() => {
@@ -126,24 +169,60 @@ export function useTimelineSelection({
 		onSelectCaption?.(null);
 	}, [selectedCaptionId, onCaptionDelete, onSelectCaption]);
 
+	const deleteSelectedTransition = useCallback(() => {
+		if (!selectedTransitionId || !onTransitionDelete) return;
+		onTransitionDelete(selectedTransitionId);
+		onSelectTransition?.(null);
+	}, [selectedTransitionId, onTransitionDelete, onSelectTransition]);
+
+	const deleteSelectedMeme = useCallback(() => {
+		if (!selectedMemeId || !onMemeDelete) return;
+		onMemeDelete(selectedMemeId);
+		onSelectMeme?.(null);
+	}, [selectedMemeId, onMemeDelete, onSelectMeme]);
+
 	const clearSelectedBlocks = useCallback(() => {
 		onSelectZoom(null);
+		onSelectZoomOut?.(null);
 		onSelectClip?.(null);
 		onSelectAnnotation?.(null);
 		onSelectAudio?.(null);
 		onSelectCaption?.(null);
+		onSelectTransition?.(null);
+		onSelectMeme?.(null);
 		setSelectAllBlocksActive(false);
-	}, [onSelectZoom, onSelectClip, onSelectAnnotation, onSelectAudio, onSelectCaption]);
+	}, [
+		onSelectZoom,
+		onSelectZoomOut,
+		onSelectClip,
+		onSelectAnnotation,
+		onSelectAudio,
+		onSelectCaption,
+		onSelectTransition,
+		onSelectMeme,
+	]);
 
 	const activateSelectAllZooms = useCallback(() => {
 		onSelectZoom(null);
+		onSelectZoomOut?.(null);
 		onSelectClip?.(null);
 		onSelectAnnotation?.(null);
 		onSelectAudio?.(null);
 		onSelectCaption?.(null);
+		onSelectTransition?.(null);
+		onSelectMeme?.(null);
 		setSelectedKeyframeId(null);
 		setSelectAllBlocksActive(true);
-	}, [onSelectZoom, onSelectClip, onSelectAnnotation, onSelectAudio, onSelectCaption]);
+	}, [
+		onSelectZoom,
+		onSelectZoomOut,
+		onSelectClip,
+		onSelectAnnotation,
+		onSelectAudio,
+		onSelectCaption,
+		onSelectTransition,
+		onSelectMeme,
+	]);
 
 	const handleSelectZoom = useCallback(
 		(id: string | null) => {
@@ -151,6 +230,14 @@ export function useTimelineSelection({
 			onSelectZoom(id);
 		},
 		[onSelectZoom],
+	);
+
+	const handleSelectZoomOut = useCallback(
+		(id: string | null) => {
+			setSelectAllBlocksActive(false);
+			onSelectZoomOut?.(id);
+		},
+		[onSelectZoomOut],
 	);
 
 	const handleSelectClip = useCallback(
@@ -183,6 +270,22 @@ export function useTimelineSelection({
 			onSelectCaption?.(id);
 		},
 		[onSelectCaption],
+	);
+
+	const handleSelectTransition = useCallback(
+		(id: string | null) => {
+			setSelectAllBlocksActive(false);
+			onSelectTransition?.(id);
+		},
+		[onSelectTransition],
+	);
+
+	const handleSelectMeme = useCallback(
+		(id: string | null) => {
+			setSelectAllBlocksActive(false);
+			onSelectMeme?.(id);
+		},
+		[onSelectMeme],
 	);
 
 	const cycleAnnotationsAtCurrentTime = useCallback(
@@ -221,16 +324,22 @@ export function useTimelineSelection({
 		deleteSelectedKeyframe,
 		handleKeyframeMove,
 		deleteSelectedZoom,
+		deleteSelectedZoomOut,
 		deleteSelectedClip,
 		deleteSelectedAnnotation,
 		deleteSelectedAudio,
 		deleteSelectedCaption,
+		deleteSelectedTransition,
+		deleteSelectedMeme,
 		clearSelectedBlocks,
 		handleSelectZoom,
+		handleSelectZoomOut,
 		handleSelectClip,
 		handleSelectAnnotation,
 		handleSelectAudio,
 		handleSelectCaption,
+		handleSelectTransition,
+		handleSelectMeme,
 		cycleAnnotationsAtCurrentTime,
 	};
 }

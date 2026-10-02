@@ -7,11 +7,14 @@ import type {
 	CropRegion,
 	CursorStyle,
 	CursorTelemetryPoint,
+	MemeRegion,
 	Padding,
 	SpeedRegion,
+	TransitionRegion,
 	TrimRegion,
 	WebcamOverlaySettings,
 	ZoomMotionBlurTuning,
+	ZoomOutRegion,
 	ZoomRegion,
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
@@ -39,6 +42,7 @@ interface GifExporterConfig {
 	sizePreset: GifSizePreset;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
 	showShadow: boolean;
@@ -62,6 +66,8 @@ interface GifExporterConfig {
 	webcam?: WebcamOverlaySettings;
 	webcamUrl?: string | null;
 	annotationRegions?: AnnotationRegion[];
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
 	cursorTelemetry?: CursorTelemetryPoint[];
@@ -85,6 +91,7 @@ interface GifExporterConfig {
 	cursorClickEffectDurationMs?: number;
 	cursorClickBounce?: number;
 	cursorClickBounceDuration?: number;
+	cursorClickDepth?: number;
 	cursorSway?: number;
 	previewWidth?: number;
 	previewHeight?: number;
@@ -141,6 +148,7 @@ export function buildGifFrameRendererConfig(
 		height: config.height,
 		wallpaper: config.wallpaper,
 		zoomRegions: config.zoomRegions,
+		zoomOutRegions: config.zoomOutRegions,
 		showShadow: config.showShadow,
 		shadowIntensity: config.shadowIntensity,
 		backgroundBlur: config.backgroundBlur,
@@ -163,6 +171,8 @@ export function buildGifFrameRendererConfig(
 		videoWidth: videoInfo.width,
 		videoHeight: videoInfo.height,
 		annotationRegions: config.annotationRegions,
+		transitionRegions: config.transitionRegions,
+		memeRegions: config.memeRegions,
 		autoCaptions: config.autoCaptions,
 		autoCaptionSettings: config.autoCaptionSettings,
 		speedRegions: config.speedRegions,
@@ -189,6 +199,7 @@ export function buildGifFrameRendererConfig(
 		cursorClickEffectDurationMs: config.cursorClickEffectDurationMs,
 		cursorClickBounce: config.cursorClickBounce,
 		cursorClickBounceDuration: config.cursorClickBounceDuration,
+		cursorClickDepth: config.cursorClickDepth,
 		cursorSway: config.cursorSway,
 	};
 }

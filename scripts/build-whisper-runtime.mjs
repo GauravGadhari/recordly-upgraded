@@ -94,14 +94,17 @@ function createDarwinTarget(arch) {
 }
 
 function getTargetConfigs() {
-	if (process.platform === "darwin") {
+	const targetPlatform =
+		process.env.WHISPER_TARGET_PLATFORM ||
+		(process.env.npm_lifecycle_event === "build:win" ? "win32" : process.platform);
+	if (targetPlatform === "darwin") {
 		return getRequestedArchitectures("darwin").map((arch) => createDarwinTarget(arch));
 	}
 
 	const arch = getHostArch();
-	const archTag = getNativeArchTag(process.platform, arch);
+	const archTag = getNativeArchTag(targetPlatform, arch);
 
-	if (process.platform === "win32") {
+	if (targetPlatform === "win32") {
 		return [
 			{
 				platform: "win32",
@@ -279,9 +282,15 @@ async function stageWindowsX64PrebuiltRuntime(target) {
 	const prebuiltExtractRoot = path.join(cacheRoot, `prebuilt-${target.archTag}`);
 	await rm(prebuiltExtractRoot, { recursive: true, force: true });
 	await mkdir(prebuiltExtractRoot, { recursive: true });
-	execFileSync("tar", ["-xf", windowsX64ArchivePath, "-C", prebuiltExtractRoot], {
-		stdio: "inherit",
-	});
+	if (process.platform === "win32") {
+		execFileSync("tar", ["-xf", windowsX64ArchivePath, "-C", prebuiltExtractRoot], {
+			stdio: "inherit",
+		});
+	} else {
+		execFileSync("unzip", ["-o", windowsX64ArchivePath, "-d", prebuiltExtractRoot], {
+			stdio: "inherit",
+		});
+	}
 
 	const runtimeDir = await findDirectoryContaining(prebuiltExtractRoot, "whisper-cli.exe");
 	if (!runtimeDir) {

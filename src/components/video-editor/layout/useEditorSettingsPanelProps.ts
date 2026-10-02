@@ -6,7 +6,15 @@ import type { useAnnotationRegionCommands } from "../hooks/useAnnotationRegionCo
 import type { useAudioRegionCommands } from "../hooks/useAudioRegionCommands";
 import type { useCaptionCommands } from "../hooks/useCaptionCommands";
 import type { useClipRegionCommands } from "../hooks/useClipRegionCommands";
+import type { useMemeRegionCommands } from "../hooks/useMemeRegionCommands";
+import type { useTransitionRegionCommands } from "../hooks/useTransitionRegionCommands";
 import type { useZoomRegionCommands } from "../hooks/useZoomRegionCommands";
+import type {
+	LibraryMemeToAdd,
+	LibrarySoundToAdd,
+	LibraryTransitionToAdd,
+	MediaLibraryPanelProps,
+} from "../mediaLibrary/mediaLibraryTypes";
 import { SettingsPanel } from "../SettingsPanel";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
@@ -22,10 +30,16 @@ type Input = {
 	audioCommands: ReturnType<typeof useAudioRegionCommands>;
 	captionCommands: ReturnType<typeof useCaptionCommands>;
 	annotationCommands: ReturnType<typeof useAnnotationRegionCommands>;
+	transitionCommands: ReturnType<typeof useTransitionRegionCommands>;
+	memeCommands: ReturnType<typeof useMemeRegionCommands>;
+	onAddSound: (sound: LibrarySoundToAdd) => void;
+	onAddTransitionAtPlayhead: (transition: LibraryTransitionToAdd) => void;
+	onAddMemeAtPlayhead: (meme: LibraryMemeToAdd) => void;
 	autoCaptionController: ReturnType<typeof useAutoCaptionController>;
 	effectiveShowCursor: boolean;
 	handleShowCursorChange: (show: boolean) => void;
 	currentTime: number;
+	duration: number;
 	isPlaying: boolean;
 	aspectRatio: AspectRatio;
 	setAspectRatio: Dispatch<SetStateAction<AspectRatio>>;
@@ -38,6 +52,11 @@ type Input = {
 	setNativeCaptureUnavailableModalOpen: Dispatch<SetStateAction<boolean>>;
 	handleUploadWebcam: () => void;
 	handleClearWebcam: () => void;
+	onKeystrokeSettingsChange?: (settings: import("../types").KeystrokeVisualSettings) => void;
+	onUpdateKeystroke?: (id: string, updates: Partial<import("../types").KeystrokeEvent>) => void;
+	onDeleteKeystroke?: (id: string) => void;
+	onToggleKeystrokeEnabled?: (id: string) => void;
+	onSeekToTime?: (timeMs: number) => void;
 };
 
 export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof SettingsPanel> {
@@ -51,6 +70,11 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		audioCommands,
 		captionCommands,
 		annotationCommands,
+		transitionCommands,
+		memeCommands,
+		onAddSound,
+		onAddTransitionAtPlayhead,
+		onAddMemeAtPlayhead,
 		autoCaptionController,
 		effectiveShowCursor,
 		handleShowCursorChange,
@@ -176,6 +200,32 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		onCursorClickBounceDurationChange: appearance.setCursorClickBounceDuration,
 		cursorSway: appearance.cursorSway,
 		onCursorSwayChange: appearance.setCursorSway,
+		cursorClickDepth: appearance.cursorClickDepth,
+		onCursorClickDepthChange: appearance.setCursorClickDepth,
+		cursorSfx: appearance.cursorSfx,
+		onCursorSfxChange: appearance.setCursorSfx,
+		onGenerateCursorSfx: (options?: import("../timeline/sfxSuggestionUtils").AutoSfxGenerationOptions) =>
+			audioCommands.handleGenerateCursorSfx({
+				telemetry: timeline.cursorTelemetry,
+				zoomRegions: timeline.zoomRegions,
+				keystrokes: timeline.keystrokes,
+				duration: input.duration,
+				options,
+			}),
+		onClearCursorSfx: audioCommands.handleClearCursorSfx,
+		onGenerateKeystrokeSfx: (options?: {
+			style?: import("../timeline/sfxSuggestionUtils").KeystrokeSfxStyle;
+			volume?: number;
+			shortcutsOnly?: boolean;
+		}) =>
+			audioCommands.handleGenerateKeystrokeSfx({
+				keystrokes: timeline.keystrokes,
+				duration: input.duration,
+				style: options?.style,
+				volume: options?.volume,
+				shortcutsOnly: options?.shortcutsOnly,
+			}),
+		onClearKeystrokeSfx: audioCommands.handleClearKeystrokeSfx,
 		borderRadius: appearance.borderRadius,
 		onBorderRadiusChange: appearance.setBorderRadius,
 		webcam: appearance.webcam,
@@ -224,6 +274,50 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		onAnnotationFigureDataChange: annotationCommands.handleAnnotationFigureDataChange,
 		onAnnotationBlurIntensityChange: annotationCommands.handleAnnotationBlurIntensityChange,
 		onAnnotationBlurColorChange: annotationCommands.handleAnnotationBlurColorChange,
+		onAnnotationHighlightDataChange: annotationCommands.handleAnnotationHighlightDataChange,
 		onAnnotationDelete: annotationCommands.handleAnnotationDelete,
+		keystrokes: timeline.keystrokes,
+		keystrokeSettings: timeline.keystrokeSettings,
+		onKeystrokeSettingsChange: input.onKeystrokeSettingsChange ?? timeline.setKeystrokeSettings,
+		onUpdateKeystroke: input.onUpdateKeystroke,
+		onDeleteKeystroke: input.onDeleteKeystroke,
+		onToggleKeystrokeEnabled: input.onToggleKeystrokeEnabled,
+		onSeekToTime: input.onSeekToTime,
+		mediaLibrary: {
+			onAddSound,
+			onAddTransition: onAddTransitionAtPlayhead,
+			onAddMeme: onAddMemeAtPlayhead,
+			transitionRegions: timeline.transitionRegions,
+			memeRegions: timeline.memeRegions,
+			selectedTransitionId: timeline.selectedTransitionId,
+			selectedMemeId: timeline.selectedMemeId,
+			onTransitionUpdate: transitionCommands.handleTransitionUpdate,
+			onMemeUpdate: memeCommands.handleMemeUpdate,
+			onTransitionDelete: transitionCommands.handleTransitionDelete,
+			onMemeDelete: memeCommands.handleMemeDelete,
+			onSeekToTime: input.onSeekToTime,
+			onGenerateCursorSfx: (options?: import("../timeline/sfxSuggestionUtils").AutoSfxGenerationOptions) =>
+				audioCommands.handleGenerateCursorSfx({
+					telemetry: timeline.cursorTelemetry,
+					zoomRegions: timeline.zoomRegions,
+					keystrokes: timeline.keystrokes,
+					duration: input.duration,
+					options,
+				}),
+			onClearCursorSfx: audioCommands.handleClearCursorSfx,
+			onGenerateKeystrokeSfx: (options?: {
+				style?: import("../timeline/sfxSuggestionUtils").KeystrokeSfxStyle;
+				volume?: number;
+				shortcutsOnly?: boolean;
+			}) =>
+				audioCommands.handleGenerateKeystrokeSfx({
+					keystrokes: timeline.keystrokes,
+					duration: input.duration,
+					style: options?.style,
+					volume: options?.volume,
+					shortcutsOnly: options?.shortcutsOnly,
+				}),
+			onClearKeystrokeSfx: audioCommands.handleClearKeystrokeSfx,
+		} satisfies MediaLibraryPanelProps,
 	};
 }

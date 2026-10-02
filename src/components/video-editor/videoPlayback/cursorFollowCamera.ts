@@ -1,6 +1,5 @@
 import type { CursorTelemetryPoint, ZoomFocus } from "../types";
 import { interpolateCursorPosition } from "./cursorRenderer";
-import { clampFocusToScale } from "./focusUtils";
 
 /**
  * Cursor-follow camera.
@@ -77,24 +76,42 @@ function clampSafeZoneRatio(ratio: number) {
 	return Math.max(0, Math.min(0.49, ratio));
 }
 
-function getVisibleHalfSpan(zoomScale: number) {
-	return 1 / (2 * Math.max(1, zoomScale));
+export function clampFocusToBounds(
+	focus: ZoomFocus,
+	scaleX: number,
+	scaleY: number,
+): ZoomFocus {
+	const halfSpanX = 1 / (2 * Math.max(1, scaleX));
+	const halfSpanY = 1 / (2 * Math.max(1, scaleY));
+	const minX = halfSpanX;
+	const maxX = Math.max(minX, 1 - halfSpanX);
+	const minY = halfSpanY;
+	const maxY = Math.max(minY, 1 - halfSpanY);
+
+	return {
+		cx: Math.max(minX, Math.min(maxX, focus.cx)),
+		cy: Math.max(minY, Math.min(maxY, focus.cy)),
+	};
 }
 
 function recenterFocusWhenCursorLeavesSafeZone(
 	currentFocus: ZoomFocus,
 	cursorFocus: ZoomFocus,
-	zoomScale: number,
+	scaleX: number,
+	scaleY: number,
 	safeZoneRatio: number,
 ): ZoomFocus {
-	const halfSpan = getVisibleHalfSpan(zoomScale);
-	const visibleSpan = halfSpan * 2;
-	const safeZoneInset = visibleSpan * clampSafeZoneRatio(safeZoneRatio);
+	const halfSpanX = 1 / (2 * Math.max(1, scaleX));
+	const halfSpanY = 1 / (2 * Math.max(1, scaleY));
+	const visibleSpanX = halfSpanX * 2;
+	const visibleSpanY = halfSpanY * 2;
+	const safeZoneInsetX = visibleSpanX * clampSafeZoneRatio(safeZoneRatio);
+	const safeZoneInsetY = visibleSpanY * clampSafeZoneRatio(safeZoneRatio);
 
-	const safeLeft = currentFocus.cx - halfSpan + safeZoneInset;
-	const safeRight = currentFocus.cx + halfSpan - safeZoneInset;
-	const safeTop = currentFocus.cy - halfSpan + safeZoneInset;
-	const safeBottom = currentFocus.cy + halfSpan - safeZoneInset;
+	const safeLeft = currentFocus.cx - halfSpanX + safeZoneInsetX;
+	const safeRight = currentFocus.cx + halfSpanX - safeZoneInsetX;
+	const safeTop = currentFocus.cy - halfSpanY + safeZoneInsetY;
+	const safeBottom = currentFocus.cy + halfSpanY - safeZoneInsetY;
 
 	let nextFocusX = currentFocus.cx;
 	let nextFocusY = currentFocus.cy;
@@ -111,12 +128,13 @@ function recenterFocusWhenCursorLeavesSafeZone(
 		nextFocusY = cursorFocus.cy;
 	}
 
-	return clampFocusToScale(
+	return clampFocusToBounds(
 		{
 			cx: nextFocusX,
 			cy: nextFocusY,
 		},
-		zoomScale,
+		scaleX,
+		scaleY,
 	);
 }
 
@@ -137,8 +155,11 @@ export function computeCursorFollowFocus(
 	zoomStrength: number,
 	regionFocus: ZoomFocus,
 	config: CursorFollowConfig = DEFAULT_CURSOR_FOLLOW_CONFIG,
+	scales?: { scaleX: number; scaleY: number },
 ): ZoomFocus {
-	const clampedRegionFocus = clampFocusToScale(regionFocus, zoomScale);
+	const scaleX = scales?.scaleX ?? zoomScale;
+	const scaleY = scales?.scaleY ?? zoomScale;
+	const clampedRegionFocus = clampFocusToBounds(regionFocus, scaleX, scaleY);
 
 	// If not zoomed (strength ≈ 0), reset state and return region focus
 	if (zoomStrength < 0.01) {
@@ -150,7 +171,8 @@ export function computeCursorFollowFocus(
 		return clampedRegionFocus;
 	}
 
-	const cursorPos = interpolateCursorPosition(cursorSamples, timeMs);
+	const hasValidTelemetry = cursorSamples.some((s) => s.cx > 0.001 || s.cy > 0.001);
+	const cursorPos = hasValidTelemetry ? interpolateCursorPosition(cursorSamples, timeMs) : null;
 	if (!cursorPos) {
 		if (state.initialized) {
 			return { cx: state.focusX, cy: state.focusY };
@@ -188,7 +210,8 @@ export function computeCursorFollowFocus(
 	const targetFocus = recenterFocusWhenCursorLeavesSafeZone(
 		{ cx: state.focusX, cy: state.focusY },
 		{ cx: cursorPos.cx, cy: cursorPos.cy },
-		zoomScale,
+		scaleX,
+		scaleY,
 		config.snapToEdgesRatio,
 	);
 

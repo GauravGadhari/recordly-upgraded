@@ -2,7 +2,9 @@ import {
 	type AnnotationRegion,
 	type ArrowDirection,
 	BLUR_ANNOTATION_STRENGTH,
+	DEFAULT_HIGHLIGHT_DATA,
 } from "@/components/video-editor/types";
+import { hexToRgba } from "@/components/video-editor/AnnotationOverlay";
 
 export interface AnnotationRenderAssets {
 	imageCache: Map<string, HTMLImageElement>;
@@ -355,6 +357,121 @@ async function renderImage(
 	ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
 }
 
+function renderHighlight(
+	ctx: CanvasRenderingContext2D,
+	annotation: AnnotationRegion,
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+	scaleFactor: number,
+	canvasWidth: number,
+	canvasHeight: number,
+	currentTimeMs: number,
+) {
+	const data = annotation.highlightData ?? DEFAULT_HIGHLIGHT_DATA;
+	const borderRadius = (data.borderRadius ?? 8) * scaleFactor;
+	const borderWidth = (data.borderWidth ?? 2) * scaleFactor;
+	const speed = Math.max(0.1, data.animationSpeed || 1);
+	const anim = data.animation || "none";
+	const glow = data.glowIntensity ?? 0.6;
+	const dim = data.spotlightDim ?? 0;
+	const borderColor = data.borderColor || "#FACC15";
+
+	// 1. Spotlight Dimming (outer canvas background dimming)
+	if (dim > 0 && canvasWidth > 0 && canvasHeight > 0) {
+		ctx.save();
+		ctx.beginPath();
+		ctx.rect(0, 0, canvasWidth, canvasHeight);
+		ctx.roundRect(x, y, width, height, borderRadius);
+		ctx.fillStyle = `rgba(0, 0, 0, ${dim})`;
+		ctx.fill("evenodd");
+		ctx.restore();
+	}
+
+	// Calculate blinking modulation
+	let alphaMultiplier = 1;
+	if (anim === "blink") {
+		const phase = (Math.sin((currentTimeMs / 1000) * Math.PI * 2 * speed) + 1) / 2;
+		alphaMultiplier = 0.25 + 0.75 * phase;
+	}
+
+	ctx.save();
+	ctx.globalAlpha = ctx.globalAlpha * alphaMultiplier;
+
+	// 2. Draw Fill Shade
+	const fillAlpha = data.fillOpacity ?? 0.2;
+	if (fillAlpha > 0) {
+		ctx.save();
+		ctx.beginPath();
+		ctx.roundRect(x, y, width, height, borderRadius);
+		ctx.fillStyle = hexToRgba(data.color || "#FACC15", fillAlpha);
+		ctx.fill();
+		ctx.restore();
+	}
+
+	// 3. Draw Shimmer Sweep if anim === "shimmer"
+	if (anim === "shimmer" && width > 0 && height > 0) {
+		ctx.save();
+		ctx.beginPath();
+		ctx.roundRect(x, y, width, height, borderRadius);
+		ctx.clip();
+
+		const cycleMs = 1800 / speed;
+		const progress = (currentTimeMs % cycleMs) / cycleMs;
+		const shimmerX = x - width + progress * (width * 2.5);
+
+		const grad = ctx.createLinearGradient(shimmerX, y, shimmerX + width * 0.6, y + height);
+		grad.addColorStop(0, "rgba(255, 255, 255, 0)");
+		grad.addColorStop(0.5, "rgba(255, 255, 255, 0.55)");
+		grad.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+		ctx.fillStyle = grad;
+		ctx.fillRect(x, y, width, height);
+		ctx.restore();
+	}
+
+	// 4. Draw Glow & Border
+	if (borderWidth > 0 || anim === "glow" || anim === "border-line") {
+		ctx.save();
+		ctx.beginPath();
+		ctx.roundRect(x, y, width, height, borderRadius);
+
+		// Glow effect
+		if (anim === "glow" || glow > 0) {
+			const glowPulse =
+				anim === "glow"
+					? 0.7 + 0.3 * Math.sin((currentTimeMs / 1000) * Math.PI * 2 * speed)
+					: 1.0;
+			ctx.shadowColor = borderColor;
+			ctx.shadowBlur = Math.round(18 * glow * scaleFactor * glowPulse);
+		}
+
+		ctx.lineWidth = borderWidth;
+		ctx.strokeStyle = borderColor;
+
+		if (anim === "border-line") {
+			const dash = 12 * scaleFactor;
+			const gap = 6 * scaleFactor;
+			ctx.setLineDash([dash, gap]);
+			const period = dash + gap;
+			const offset = -(((currentTimeMs / 1000) * 36 * speed * scaleFactor) % period);
+			ctx.lineDashOffset = offset;
+		} else if (data.borderStyle === "dashed") {
+			ctx.setLineDash([8 * scaleFactor, 6 * scaleFactor]);
+		} else if (data.borderStyle === "dotted") {
+			ctx.setLineDash([borderWidth, borderWidth * 1.5]);
+		} else {
+			ctx.setLineDash([]);
+		}
+
+		ctx.stroke();
+		ctx.restore();
+	}
+
+	ctx.restore();
+}
+
 export async function renderAnnotations(
 	ctx: CanvasRenderingContext2D,
 	annotations: AnnotationRegion[],
@@ -457,6 +574,22 @@ export async function renderAnnotations(
 				ctx.restore();
 				break;
 			}
+
+			case "highlight": {
+				renderHighlight(
+					ctx,
+					annotation,
+					x,
+					y,
+					width,
+					height,
+					effectiveScaleFactor,
+					canvasWidth,
+					canvasHeight,
+					currentTimeMs,
+				);
+				break;
+			}
 		}
 	}
 }
@@ -506,6 +639,20 @@ export async function renderAnnotationToCanvas(
 				canvasWidth,
 				canvasHeight,
 				scaleFactor,
+			);
+			break;
+		case "highlight":
+			renderHighlight(
+				ctx,
+				annotation,
+				0,
+				0,
+				canvasWidth,
+				canvasHeight,
+				scaleFactor,
+				canvasWidth,
+				canvasHeight,
+				0,
 			);
 			break;
 		case "blur":

@@ -1,12 +1,16 @@
 import {
+	ArrowsLeftRight as TransitionIcon,
 	FilmSlate as Film,
 	Gauge,
 	ChatCircle as MessageSquare,
 	MusicNotes as Music,
+	Keyboard,
 	MouseLeftClickIcon as PhMouseLeftClick,
 	Scissors,
+	Smiley as MemeIcon,
 	SpeakerX,
 	MagnifyingGlassPlus as ZoomIn,
+	MagnifyingGlassMinus as ZoomOut,
 } from "@phosphor-icons/react";
 import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
@@ -35,7 +39,18 @@ interface ItemProps {
 	waveformGain?: number;
 	waveformNormalize?: boolean;
 	muted?: boolean;
-	variant?: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio" | "caption";
+	variant?:
+		| "zoom"
+		| "zoom-out"
+		| "trim"
+		| "clip"
+		| "annotation"
+		| "speed"
+		| "audio"
+		| "caption"
+		| "keystroke"
+		| "transition"
+		| "meme";
 	isLoading?: boolean;
 	loadingLabel?: string;
 }
@@ -121,17 +136,24 @@ export default function Item({
 	}
 
 	const isZoom = variant === "zoom";
+	const isZoomOut = variant === "zoom-out";
 	const isTrim = variant === "trim";
 	const isClip = variant === "clip";
 	const isSpeed = variant === "speed";
 	const isAudio = variant === "audio";
 	const isCaption = variant === "caption";
+	const isKeystroke = variant === "keystroke";
+	const isTransition = variant === "transition";
+	const isMeme = variant === "meme";
 	const showAudioWaveform = isAudio && Boolean(waveformPeaks);
 	const clipSpeedLabel = isClip ? formatClipSpeedLabel(speedValue ?? 1) : null;
+	const canResize = !disabled && !isLoading && !isKeystroke;
 
 	const glassClass = isZoom
 		? glassStyles.glassPurple
-		: isTrim
+		: isZoomOut
+			? glassStyles.glassCyan
+			: isTrim
 			? glassStyles.glassRed
 			: isClip
 				? glassStyles.glassCyan
@@ -141,7 +163,13 @@ export default function Item({
 						? glassStyles.glassDarkGreen
 						: isCaption
 							? glassStyles.glassCaption
-							: glassStyles.glassYellow;
+							: isKeystroke
+								? glassStyles.glassDarkGreen
+								: isTransition
+									? glassStyles.glassViolet
+									: isMeme
+										? glassStyles.glassEmerald
+										: glassStyles.glassYellow;
 
 	const MIN_ITEM_PX = 6;
 	const handleSelect = () => {
@@ -190,24 +218,40 @@ export default function Item({
 						event.stopPropagation();
 					}}
 				>
-					<div
-						className={cn(glassStyles.zoomEndCap, glassStyles.left)}
-						style={{ cursor: "col-resize", pointerEvents: "auto" }}
-						title="Resize left"
-					/>
-					<div
-						className={cn(glassStyles.zoomEndCap, glassStyles.right)}
-						style={{ cursor: "col-resize", pointerEvents: "auto" }}
-						title="Resize right"
-					/>
+					{canResize && (
+						<>
+							<div
+								className={cn(glassStyles.zoomEndCap, glassStyles.left)}
+								style={{ cursor: "col-resize", pointerEvents: "auto" }}
+								title="Trim start (drag to resize)"
+								aria-label="Trim start"
+							/>
+							<div
+								className={cn(glassStyles.zoomEndCap, glassStyles.right)}
+								style={{ cursor: "col-resize", pointerEvents: "auto" }}
+								title="Trim end (drag to resize)"
+								aria-label="Trim end"
+							/>
+						</>
+					)}
 					{showAudioWaveform && waveformPeaks && (
 						<AudioWaveform
 							peaks={waveformPeaks}
-							segmentStartMs={waveformSegmentSpan?.start ?? span.start}
-							segmentEndMs={waveformSegmentSpan?.end ?? span.end}
+							segmentStartMs={
+								waveformSegmentSpan?.start ??
+								(span.start > (waveformPeaks.durationMs ?? 0)
+									? 0
+									: span.start)
+							}
+							segmentEndMs={
+								waveformSegmentSpan?.end ??
+								(span.start > (waveformPeaks.durationMs ?? 0)
+									? Math.max(0, span.end - span.start)
+									: span.end)
+							}
 							gain={waveformGain}
 							normalize={waveformNormalize}
-							className="absolute inset-0 w-full h-full pointer-events-none opacity-45"
+							className="absolute inset-0 w-full h-full pointer-events-none opacity-60"
 						/>
 					)}
 					{/* Muted overlay for source audio track items */}
@@ -224,6 +268,13 @@ export default function Item({
 									<ZoomIn className="w-3.5 h-3.5 shrink-0" />
 									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
 										{ZOOM_LABELS[zoomDepth] || `${zoomDepth}×`}
+									</span>
+								</>
+							) : isZoomOut ? (
+								<>
+									<ZoomOut className="w-3.5 h-3.5 shrink-0 text-cyan-200" />
+									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap text-cyan-100">
+										Fit Screen
 									</span>
 								</>
 							) : isTrim ? (
@@ -254,7 +305,32 @@ export default function Item({
 								</>
 							) : isAudio ? (
 								<>
-									<Music className="w-3.5 h-3.5 shrink-0" />
+									{children === "Click" ? (
+										<PhMouseLeftClick className="w-3.5 h-3.5 shrink-0" />
+									) : (
+										<Music className="w-3.5 h-3.5 shrink-0" />
+									)}
+									<span className="text-[11px] font-semibold tracking-tight truncate max-w-full">
+										{children}
+									</span>
+								</>
+							) : isKeystroke ? (
+								<>
+									<Keyboard className="w-3.5 h-3.5 shrink-0" />
+									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+										{children}
+									</span>
+								</>
+							) : isTransition ? (
+								<>
+									<TransitionIcon className="w-3.5 h-3.5 shrink-0" />
+									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+										{children}
+									</span>
+								</>
+							) : isMeme ? (
+								<>
+									<MemeIcon className="w-3.5 h-3.5 shrink-0" />
 									<span className="text-[11px] font-semibold tracking-tight truncate max-w-full">
 										{children}
 									</span>
@@ -282,9 +358,11 @@ export default function Item({
 							</div>
 						) : (
 							<span
-								className={`text-[9px] tabular-nums tracking-tight whitespace-nowrap transition-opacity ${
-									isSelected ? "opacity-60" : "opacity-0 group-hover:opacity-40"
-								}`}
+								className={cn(
+									"text-[9px] tabular-nums tracking-tight whitespace-nowrap transition-opacity",
+									isAudio && (span.end - span.start <= 350) && "hidden",
+									isSelected ? "opacity-60" : "opacity-0 group-hover:opacity-40",
+								)}
 							>
 								{timeLabel}
 							</span>

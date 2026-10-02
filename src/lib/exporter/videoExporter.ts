@@ -8,15 +8,22 @@ import type {
 	CropRegion,
 	CursorStyle,
 	CursorTelemetryPoint,
+	KeystrokeEvent,
+	KeystrokeVisualSettings,
+	MemeRegion,
 	Padding,
 	SourceAudioTrackSettings,
 	SpeedRegion,
+	TransitionRegion,
 	TrimRegion,
+	VerticalTrackingMode,
 	WebcamOverlaySettings,
 	ZoomMotionBlurTuning,
+	ZoomOutRegion,
 	ZoomRegion,
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import { buildEditedTrackSourceSegments, classifyEditedTrackStrategy } from "./editedTrackStrategy";
@@ -29,6 +36,7 @@ import {
 } from "./finalizationTimeout";
 import { FrameRenderer } from "./frameRenderer";
 import { getLocalFilePath } from "./localMediaSource";
+import { buildMediaOverlayAudioRegions } from "./mediaOverlayRenderer";
 import type { SupportedMp4EncoderPath } from "./mp4Support";
 import { VideoMuxer } from "./muxer";
 import { type DecodedVideoInfo, StreamingVideoDecoder } from "./streamingDecoder";
@@ -48,6 +56,7 @@ interface VideoExporterConfig extends ExportConfig {
 	videoUrl: string;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
 	showShadow: boolean;
@@ -73,6 +82,8 @@ interface VideoExporterConfig extends ExportConfig {
 	annotationRegions?: AnnotationRegion[];
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
+	keystrokes?: KeystrokeEvent[];
+	keystrokeSettings?: KeystrokeVisualSettings;
 	cursorTelemetry?: CursorTelemetryPoint[];
 	showCursor?: boolean;
 	cursorStyle?: CursorStyle;
@@ -87,10 +98,13 @@ interface VideoExporterConfig extends ExportConfig {
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
 	cursorClickBounceDuration?: number;
+	cursorClickDepth?: number;
 	cursorSway?: number;
 	zoomSmoothness?: number;
 	audioRegions?: AudioRegion[];
 	clipRegions?: ClipRegion[];
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
 	sourceAudioFallbackPaths?: string[];
 	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
 	sourceAudioTrackSettings?: SourceAudioTrackSettings;
@@ -98,6 +112,8 @@ interface VideoExporterConfig extends ExportConfig {
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
 	preferredEncoderPath?: SupportedMp4EncoderPath | null;
+	aspectRatio?: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 }
 
 type NativeAudioPlan =
@@ -134,6 +150,15 @@ function hasNonDefaultSourceTrackSettings(sourceAudioTrackSettings?: SourceAudio
 }
 
 export class VideoExporter {
+	private getMixedAudioRegions(): AudioRegion[] {
+		return [
+			...(this.config.audioRegions ?? []),
+			...buildMediaOverlayAudioRegions(
+				this.config.memeRegions,
+				this.config.transitionRegions,
+			),
+		];
+	}
 	private config: VideoExporterConfig;
 	private streamingDecoder: StreamingVideoDecoder | null = null;
 	private renderer: FrameRenderer | null = null;
@@ -220,6 +245,7 @@ export class VideoExporter {
 				preferredRenderBackend: undefined,
 				wallpaper: this.config.wallpaper,
 				zoomRegions: this.config.zoomRegions,
+				zoomOutRegions: this.config.zoomOutRegions,
 				showShadow: this.config.showShadow,
 				shadowIntensity: this.config.shadowIntensity,
 				backgroundBlur: this.config.backgroundBlur,
@@ -244,6 +270,8 @@ export class VideoExporter {
 				annotationRegions: this.config.annotationRegions,
 				autoCaptions: this.config.autoCaptions,
 				autoCaptionSettings: this.config.autoCaptionSettings,
+				keystrokes: this.config.keystrokes,
+				keystrokeSettings: this.config.keystrokeSettings,
 				speedRegions: this.config.speedRegions,
 				previewWidth: this.config.previewWidth,
 				previewHeight: this.config.previewHeight,
@@ -261,12 +289,17 @@ export class VideoExporter {
 				cursorMotionBlur: this.config.cursorMotionBlur,
 				cursorClickBounce: this.config.cursorClickBounce,
 				cursorClickBounceDuration: this.config.cursorClickBounceDuration,
+				cursorClickDepth: this.config.cursorClickDepth,
 				cursorSway: this.config.cursorSway,
 				zoomSmoothness: this.config.zoomSmoothness,
+				transitionRegions: this.config.transitionRegions,
+				memeRegions: this.config.memeRegions,
+				aspectRatio: this.config.aspectRatio,
+				verticalTrackingMode: this.config.verticalTrackingMode,
 			});
 			await this.renderer.initialize();
 
-			const hasAudioRegions = (this.config.audioRegions ?? []).length > 0;
+			const hasAudioRegions = this.getMixedAudioRegions().length > 0;
 			const hasSourceAudioFallback = (this.config.sourceAudioFallbackPaths ?? []).length > 0;
 			const hasAudio = videoInfo.hasAudio || hasAudioRegions || hasSourceAudioFallback;
 
@@ -408,7 +441,7 @@ export class VideoExporter {
 								this.config.trimRegions,
 								this.config.speedRegions,
 								undefined,
-								this.config.audioRegions,
+								this.getMixedAudioRegions(),
 								this.config.sourceAudioFallbackPaths,
 								this.config.sourceAudioFallbackStartDelayMsByPath,
 								this.config.sourceAudioTrackSettings,
@@ -544,7 +577,7 @@ export class VideoExporter {
 
 	private buildNativeAudioPlan(videoInfo: DecodedVideoInfo): NativeAudioPlan {
 		const speedRegions = this.config.speedRegions ?? [];
-		const audioRegions = this.config.audioRegions ?? [];
+		const audioRegions = this.getMixedAudioRegions();
 		const sourceAudioFallbackPaths = (this.config.sourceAudioFallbackPaths ?? []).filter(
 			(audioPath) => typeof audioPath === "string" && audioPath.trim().length > 0,
 		);
@@ -858,7 +891,7 @@ export class VideoExporter {
 						this.config.videoUrl,
 						this.config.trimRegions,
 						this.config.speedRegions,
-						this.config.audioRegions,
+						this.getMixedAudioRegions(),
 						this.config.sourceAudioFallbackPaths,
 						this.config.sourceAudioFallbackStartDelayMsByPath,
 						this.config.sourceAudioTrackSettings,
@@ -956,7 +989,7 @@ export class VideoExporter {
 						this.config.videoUrl,
 						this.config.trimRegions,
 						this.config.speedRegions,
-						this.config.audioRegions,
+						this.getMixedAudioRegions(),
 						this.config.sourceAudioFallbackPaths,
 						this.config.sourceAudioFallbackStartDelayMsByPath,
 						this.config.sourceAudioTrackSettings,

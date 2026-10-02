@@ -120,7 +120,7 @@ export type NativeMacWindowSource = {
 	height?: number;
 };
 
-export type HookEventName = "mousedown" | "mouseup" | "mousemove";
+export type HookEventName = "mousedown" | "mouseup" | "mousemove" | "keydown" | "keyup";
 
 export type HookMouseEvent = {
 	button?: number;
@@ -139,12 +139,42 @@ export type HookMouseEvent = {
 	};
 };
 
-export type HookEventListener = (event: HookMouseEvent) => void;
+export type HookKeyEvent = {
+	keycode?: number;
+	rawcode?: number;
+	key?: string;
+	altKey?: boolean;
+	ctrlKey?: boolean;
+	metaKey?: boolean;
+	shiftKey?: boolean;
+	data?: {
+		keycode?: number;
+		rawcode?: number;
+		key?: string;
+	};
+};
+
+export interface KeystrokeEvent {
+	id: string;
+	timeMs: number;
+	durationMs: number;
+	keys: string[];
+	displayText: string;
+	isShortcut: boolean;
+	enabled?: boolean;
+}
+
+export interface KeystrokeTelemetryData {
+	version: number;
+	events: KeystrokeEvent[];
+}
+
+export type HookEventListener = (event: any) => void;
 
 export type UiohookLike = {
-	on: (eventName: HookEventName, listener: HookEventListener) => void;
-	off?: (eventName: HookEventName, listener: HookEventListener) => void;
-	removeListener?: (eventName: HookEventName, listener: HookEventListener) => void;
+	on: (eventName: string, listener: HookEventListener) => void;
+	off?: (eventName: string, listener: HookEventListener) => void;
+	removeListener?: (eventName: string, listener: HookEventListener) => void;
 	start: () => void;
 	stop?: () => void;
 };

@@ -16,6 +16,13 @@ export interface ZoomRegion {
 	mode?: ZoomMode;
 }
 
+export interface ZoomOutRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	label?: string;
+}
+
 export interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
@@ -46,6 +53,7 @@ export interface CursorVisualSettings {
 	motionBlur: number;
 	clickBounce: number;
 	clickBounceDuration: number;
+	clickDepth: number;
 	clickEffect: CursorClickEffectStyle;
 	clickEffectColor: string;
 	clickEffectScale: number;
@@ -54,6 +62,15 @@ export interface CursorVisualSettings {
 	sway: number;
 	style: CursorStyle;
 }
+
+export type {
+	ClickSfxStyle,
+	CursorSfxSettings,
+	DragSfxStyle,
+	WhooshSfxStyle,
+	WhooshTriggerMode,
+} from "./timeline/sfxSuggestionUtils";
+export { DEFAULT_CURSOR_SFX_SETTINGS } from "./timeline/sfxSuggestionUtils";
 
 export type CursorStyle =
 	| "macos"
@@ -65,12 +82,21 @@ export type CursorStyle =
 	| (string & {});
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
 
-export type CursorClickEffectStyle = "none" | "spotlight" | "ripple" | "echo";
+export type CursorClickEffectStyle =
+	| "none"
+	| "spotlight"
+	| "ripple"
+	| "echo"
+	| "depth";
 export const DEFAULT_CURSOR_CLICK_EFFECT: CursorClickEffectStyle = "none";
 export const DEFAULT_CURSOR_CLICK_EFFECT_COLOR = "#2563EB";
 export const DEFAULT_CURSOR_CLICK_EFFECT_SCALE = 1;
 export const DEFAULT_CURSOR_CLICK_EFFECT_OPACITY = 1;
 export const DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS = 600;
+
+export const DEFAULT_CURSOR_CLICK_DEPTH = 1;
+export const MIN_CURSOR_CLICK_DEPTH = 0;
+export const MAX_CURSOR_CLICK_DEPTH = 2;
 
 export function normalizeCursorClickEffectStyle(
 	value: unknown,
@@ -80,9 +106,23 @@ export function normalizeCursorClickEffectStyle(
 		return "echo";
 	}
 
-	return value === "none" || value === "spotlight" || value === "ripple" || value === "echo"
+	return value === "none" ||
+		value === "spotlight" ||
+		value === "ripple" ||
+		value === "echo" ||
+		value === "depth"
 		? value
 		: fallback;
+}
+
+export function normalizeCursorClickDepth(
+	value: unknown,
+	fallback: number = DEFAULT_CURSOR_CLICK_DEPTH,
+): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return fallback;
+	}
+	return Math.max(MIN_CURSOR_CLICK_DEPTH, Math.min(MAX_CURSOR_CLICK_DEPTH, value));
 }
 
 export function normalizeCursorClickEffectColor(
@@ -109,6 +149,7 @@ export function normalizeCursorClickEffectColor(
 export type EditorEffectSection =
 	| "scene"
 	| "cursor"
+	| "keystrokes"
 	| "captions"
 	| "caption"
 	| "webcam"
@@ -119,9 +160,15 @@ export type EditorEffectSection =
 	| "extensions"
 	| "clip"
 	| "audio"
+	| "sounds"
+	| "transitions"
+	| "memes"
 	| `ext:${string}`;
 
 export type ZoomTransitionEasing = "recordly" | "glide" | "smooth" | "snappy" | "linear";
+
+export type VerticalTrackingMode = "auto-follow" | "fit";
+export const DEFAULT_VERTICAL_TRACKING_MODE: VerticalTrackingMode = "auto-follow";
 
 export type WebcamCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type WebcamPositionPreset =
@@ -267,7 +314,7 @@ export function sortClipRegions(clips: ClipRegion[]): ClipRegion[] {
 	return [...clips].sort((left, right) => left.startMs - right.startMs);
 }
 
-function getSafeClipSpeed(clip: ClipRegion) {
+export function getSafeClipSpeed(clip: ClipRegion) {
 	return Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
 }
 
@@ -418,10 +465,43 @@ export function trimsToClips(trims: TrimRegion[], totalDurationMs: number): Clip
 	return clips;
 }
 
-export type AnnotationType = "text" | "image" | "figure" | "blur";
+export type AnnotationType = "text" | "image" | "figure" | "blur" | "highlight";
 export const BLUR_ANNOTATION_STRENGTH = 20;
 export const BASE_PREVIEW_WIDTH = 1920;
 export const BASE_PREVIEW_HEIGHT = 1080;
+
+export type HighlightAnimationType =
+	| "none"
+	| "border-line"
+	| "blink"
+	| "glow"
+	| "shimmer";
+
+export interface HighlightData {
+	color: string;
+	fillOpacity: number;
+	borderColor: string;
+	borderWidth: number;
+	borderRadius: number;
+	borderStyle: "solid" | "dashed" | "dotted";
+	animation: HighlightAnimationType;
+	animationSpeed: number;
+	glowIntensity: number;
+	spotlightDim: number;
+}
+
+export const DEFAULT_HIGHLIGHT_DATA: HighlightData = {
+	color: "#FACC15",
+	fillOpacity: 0.2,
+	borderColor: "#FACC15",
+	borderWidth: 2,
+	borderRadius: 8,
+	borderStyle: "solid",
+	animation: "none",
+	animationSpeed: 1,
+	glowIntensity: 0.6,
+	spotlightDim: 0,
+};
 
 export type ArrowDirection =
 	| "up"
@@ -485,6 +565,7 @@ export interface AnnotationRegion {
 	figureData?: FigureData;
 	blurIntensity?: number;
 	blurColor?: string;
+	highlightData?: HighlightData;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {
@@ -558,6 +639,48 @@ export interface AudioRegion {
 	audioPath: string;
 	volume: number;
 	normalize?: boolean;
+	trackIndex?: number;
+	label?: string;
+	category?: string;
+}
+
+export type TransitionType =
+	| "fade-black"
+	| "dip-white"
+	| "cross-dissolve"
+	| "zoom-in"
+	| "zoom-out"
+	| "slide-left"
+	| "slide-right"
+	| "glitch"
+	| "film-burn";
+
+export interface TransitionRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	type: TransitionType;
+	overlayVideoPath?: string;
+	sfxAudioPath?: string;
+	name?: string;
+	trackIndex?: number;
+	greenScreen?: boolean;
+	chromaKeySimilarity?: number; // 0.1-0.6
+	blendMode?: "screen" | "chroma-key" | "normal";
+}
+
+export interface MemeRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	videoPath: string;
+	name: string;
+	position: { x: number; y: number }; // 0-100%
+	size: { width: number; height: number }; // 0-100%
+	volume: number; // 0-1
+	greenScreen?: boolean;
+	chromaKeySimilarity?: number; // 0.1-0.6
+	zIndex?: number;
 	trackIndex?: number;
 }
 
@@ -655,3 +778,49 @@ function clamp(value: number, min: number, max: number) {
 	if (Number.isNaN(value)) return (min + max) / 2;
 	return Math.min(max, Math.max(min, value));
 }
+
+export interface KeystrokeEvent {
+	id: string;
+	timeMs: number;
+	durationMs: number;
+	keys: string[];
+	displayText: string;
+	isShortcut: boolean;
+	enabled?: boolean;
+}
+
+export type KeystrokePosition =
+	| "bottom-center"
+	| "bottom-left"
+	| "bottom-right"
+	| "center"
+	| "center-left"
+	| "center-right"
+	| "top-center"
+	| "top-left"
+	| "top-right";
+
+export type KeystrokeSize = "small" | "medium" | "large";
+export type KeystrokeStyle = "dark" | "light" | "glass" | "accent";
+
+export interface KeystrokeVisualSettings {
+	enabled: boolean;
+	showShortcutsOnly: boolean;
+	position: KeystrokePosition;
+	size: KeystrokeSize;
+	style: KeystrokeStyle;
+	lingerDurationMs: number;
+	maxLayers?: number;
+}
+
+export const DEFAULT_KEYSTROKE_SETTINGS: KeystrokeVisualSettings = {
+	enabled: true,
+	showShortcutsOnly: true,
+	position: "bottom-center",
+	size: "medium",
+	style: "dark",
+	lingerDurationMs: 1500,
+	maxLayers: 2,
+};
+
+

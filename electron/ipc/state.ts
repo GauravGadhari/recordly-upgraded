@@ -3,6 +3,7 @@ import type {
 	CursorInteractionType,
 	CursorTelemetryPoint,
 	CursorVisualType,
+	KeystrokeEvent,
 	NativeCaptureDiagnostics,
 	RecordingSessionData,
 	SelectedSource,
@@ -47,6 +48,14 @@ export let windowsMicAudioPath: string | null = null;
 export let windowsOrphanedMicAudioPath: string | null = null;
 export let windowsPendingVideoPath: string | null = null;
 
+// ── Linux native capture ──────────────────────────────────────────────────────
+export let linuxCaptureProcess: ChildProcessWithoutNullStreams | null = null;
+export let linuxCaptureOutputBuffer = "";
+export let linuxCaptureTargetPath: string | null = null;
+export let linuxNativeCaptureActive = false;
+export let linuxCaptureStopRequested = false;
+export let linuxCapturePaused = false;
+
 // ── Diagnostics ───────────────────────────────────────────────────────────────
 export let lastNativeCaptureDiagnostics: NativeCaptureDiagnostics | null = null;
 
@@ -87,6 +96,10 @@ export let lastLeftClick: { timeMs: number; cx: number; cy: number } | null = nu
 export let linuxCursorScreenPoint: { x: number; y: number; updatedAt: number } | null = null;
 export let selectedWindowBounds: WindowBounds | null = null;
 export let windowBoundsCaptureInterval: NodeJS.Timeout | null = null;
+
+// ── Keystroke telemetry ───────────────────────────────────────────────────────
+export let activeKeystrokeEvents: KeystrokeEvent[] = [];
+export const activePressedModifiers = new Set<string>();
 
 // ── Native macOS window source cache ─────────────────────────────────────────
 export let cachedNativeMacWindowSources: import("./types").NativeMacWindowSource[] | null = null;
@@ -185,6 +198,25 @@ export function setWindowsPendingVideoPath(v: string | null) {
 	windowsPendingVideoPath = v;
 }
 
+export function setLinuxCaptureProcess(v: ChildProcessWithoutNullStreams | null) {
+	linuxCaptureProcess = v;
+}
+export function setLinuxCaptureOutputBuffer(v: string) {
+	linuxCaptureOutputBuffer = v;
+}
+export function setLinuxCaptureTargetPath(v: string | null) {
+	linuxCaptureTargetPath = v;
+}
+export function setLinuxNativeCaptureActive(v: boolean) {
+	linuxNativeCaptureActive = v;
+}
+export function setLinuxCaptureStopRequested(v: boolean) {
+	linuxCaptureStopRequested = v;
+}
+export function setLinuxCapturePaused(v: boolean) {
+	linuxCapturePaused = v;
+}
+
 export function setLastNativeCaptureDiagnostics(v: NativeCaptureDiagnostics | null) {
 	lastNativeCaptureDiagnostics = v;
 }
@@ -271,6 +303,13 @@ export function setSelectedWindowBounds(v: WindowBounds | null) {
 }
 export function setWindowBoundsCaptureInterval(v: NodeJS.Timeout | null) {
 	windowBoundsCaptureInterval = v;
+}
+
+export function setActiveKeystrokeEvents(v: KeystrokeEvent[]) {
+	activeKeystrokeEvents = v;
+}
+export function pushActiveKeystrokeEvent(v: KeystrokeEvent) {
+	activeKeystrokeEvents.push(v);
 }
 
 export function setCachedNativeMacWindowSources(

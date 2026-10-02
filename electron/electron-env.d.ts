@@ -348,6 +348,56 @@ interface Window {
 			files?: string[];
 			error?: string;
 		}>;
+		listMediaSounds: (options?: { category?: string; search?: string }) => Promise<{
+			success: boolean;
+			categories: string[];
+			items: Array<{
+				id: string;
+				name: string;
+				filePath: string;
+				category: string;
+			}>;
+			error?: string;
+		}>;
+		listMediaTransitions: () => Promise<{
+			success: boolean;
+			builtIn: Array<{
+				id: string;
+				name: string;
+				type: string;
+				description?: string;
+			}>;
+			filmBurns: Array<{
+				id: string;
+				name: string;
+				filePath: string;
+				type: "film-burn";
+			}>;
+			error?: string;
+		}>;
+		listMediaMemes: (options?: { category?: string; search?: string }) => Promise<{
+			success: boolean;
+			items: Array<{
+				id: string;
+				name: string;
+				filePath: string;
+				category: "memes" | "green-screens" | "custom";
+				isGreenScreen: boolean;
+			}>;
+			error?: string;
+		}>;
+		pickMediaFile: (type: "sound" | "transition" | "meme") => Promise<{
+			success: boolean;
+			filePath?: string;
+			name?: string;
+			error?: string;
+		}>;
+		getMediaPreviewVideo: (filePath: string) => Promise<{
+			success: boolean;
+			previewPath?: string;
+			url?: string;
+			error?: string;
+		}>;
 		readLocalFile: (
 			filePath: string,
 		) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;
@@ -586,7 +636,11 @@ interface Window {
 			startDelayMsByPath?: Record<string, number>;
 			error?: string;
 		}>;
-		setRecordingState: (recording: boolean) => Promise<void>;
+		setRecordingState: (
+			recording: boolean,
+			options?: { startTimeMs?: number },
+		) => Promise<void>;
+		warmupCursorMonitor?: () => Promise<{ success: boolean; error?: string }>;
 		getCursorTelemetry: (videoPath?: string) => Promise<{
 			success: boolean;
 			samples: CursorTelemetryPoint[];
@@ -599,6 +653,21 @@ interface Window {
 		) => Promise<{
 			success: boolean;
 			samples: CursorTelemetryPoint[];
+			message?: string;
+			error?: string;
+		}>;
+		getKeystrokes: (videoPath?: string) => Promise<{
+			success: boolean;
+			events: KeystrokeEvent[];
+			message?: string;
+			error?: string;
+		}>;
+		setKeystrokes: (
+			videoPath: string | undefined,
+			events: KeystrokeEvent[],
+		) => Promise<{
+			success: boolean;
+			events: KeystrokeEvent[];
 			message?: string;
 			error?: string;
 		}>;
@@ -891,6 +960,7 @@ interface Window {
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean>) => () => void;
 		isNativeWindowsCaptureAvailable: () => Promise<{ available: boolean }>;
+		isNativeLinuxCaptureAvailable: () => Promise<{ available: boolean }>;
 		muxNativeWindowsRecording: (expectedDurationMs?: number) => Promise<{
 			success: boolean;
 			path?: string;
@@ -988,4 +1058,14 @@ interface AutoCaptionCue {
 		endMs: number;
 		leadingSpace?: boolean;
 	}>;
+}
+
+interface KeystrokeEvent {
+	id: string;
+	timeMs: number;
+	durationMs: number;
+	keys: string[];
+	displayText: string;
+	isShortcut: boolean;
+	enabled?: boolean;
 }

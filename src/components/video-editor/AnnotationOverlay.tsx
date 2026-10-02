@@ -2,7 +2,36 @@ import { useRef } from "react";
 import { Rnd } from "react-rnd";
 import { cn } from "@/lib/utils";
 import { getArrowComponent } from "./ArrowSvgs";
-import { type AnnotationRegion, BASE_PREVIEW_WIDTH, BLUR_ANNOTATION_STRENGTH } from "./types";
+import {
+	type AnnotationRegion,
+	BASE_PREVIEW_WIDTH,
+	BLUR_ANNOTATION_STRENGTH,
+	DEFAULT_HIGHLIGHT_DATA,
+} from "./types";
+
+export function hexToRgba(color: string, opacity: number): string {
+	if (!color) return `rgba(250, 204, 21, ${opacity})`;
+	if (color.startsWith("rgba")) {
+		return color.replace(/[\d.]+\)$/g, `${opacity})`);
+	}
+	if (color.startsWith("rgb")) {
+		return color.replace("rgb", "rgba").replace(")", `, ${opacity})`);
+	}
+	let hex = color.replace("#", "");
+	if (hex.length === 3) {
+		hex = hex
+			.split("")
+			.map((c) => c + c)
+			.join("");
+	}
+	if (hex.length >= 6) {
+		const r = parseInt(hex.substring(0, 2), 16) || 0;
+		const g = parseInt(hex.substring(2, 4), 16) || 0;
+		const b = parseInt(hex.substring(4, 6), 16) || 0;
+		return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+	}
+	return color;
+}
 
 type Rect = {
 	x: number;
@@ -201,6 +230,93 @@ export function AnnotationOverlay({
 				);
 			}
 
+			case "highlight": {
+				const data = annotation.highlightData ?? DEFAULT_HIGHLIGHT_DATA;
+				const scaledBorderRadius = (data.borderRadius ?? 8) * blurScaleFactor;
+				const scaledBorderWidth = (data.borderWidth ?? 2) * blurScaleFactor;
+				const speed = Math.max(0.1, data.animationSpeed || 1);
+				const anim = data.animation || "none";
+				const glow = data.glowIntensity ?? 0.6;
+				const dim = data.spotlightDim ?? 0;
+
+				const fillColor = hexToRgba(data.color || "#FACC15", data.fillOpacity ?? 0.2);
+				const borderColor = data.borderColor || "#FACC15";
+
+				const shadows: string[] = [];
+				if (dim > 0) {
+					shadows.push(`0 0 0 9999px rgba(0, 0, 0, ${dim})`);
+				}
+				if ((anim === "glow" || glow > 0) && (data.borderWidth > 0 || anim === "glow")) {
+					const glowSpread = Math.max(1, Math.round(18 * glow * blurScaleFactor));
+					shadows.push(
+						`0 0 ${glowSpread}px ${Math.round(3 * glow * blurScaleFactor)}px ${borderColor}`,
+					);
+				}
+
+				return (
+					<div
+						className={cn(
+							"relative w-full h-full overflow-hidden transition-all",
+							anim === "blink" && "animate-[recordly-highlight-pulse_1.2s_ease-in-out_infinite]",
+							anim === "glow" && "animate-[recordly-highlight-glow_1.5s_ease-in-out_infinite]",
+						)}
+						style={{
+							borderRadius: `${scaledBorderRadius}px`,
+							backgroundColor: fillColor,
+							border:
+								anim === "border-line"
+									? "none"
+									: `${scaledBorderWidth}px ${data.borderStyle || "solid"} ${borderColor}`,
+							boxShadow: shadows.length > 0 ? shadows.join(", ") : undefined,
+							animationDuration:
+								anim === "blink"
+									? `${(1.2 / speed).toFixed(2)}s`
+									: anim === "glow"
+										? `${(1.5 / speed).toFixed(2)}s`
+										: undefined,
+							["--highlight-glow-color" as string]: borderColor,
+						}}
+					>
+						{/* Animated marching dash border */}
+						{anim === "border-line" && scaledBorderWidth > 0 && (
+							<svg
+								className="absolute inset-0 w-full h-full pointer-events-none"
+								style={{ overflow: "visible" }}
+							>
+								<rect
+									x={scaledBorderWidth / 2}
+									y={scaledBorderWidth / 2}
+									width={`calc(100% - ${scaledBorderWidth}px)`}
+									height={`calc(100% - ${scaledBorderWidth}px)`}
+									rx={scaledBorderRadius}
+									ry={scaledBorderRadius}
+									fill="none"
+									stroke={borderColor}
+									strokeWidth={scaledBorderWidth}
+									strokeDasharray={`${12 * blurScaleFactor} ${6 * blurScaleFactor}`}
+									className="recordly-highlight-marching-dash"
+									style={{
+										animationDuration: `${(1.2 / speed).toFixed(2)}s`,
+									}}
+								/>
+							</svg>
+						)}
+
+						{/* Animated shimmer light sweep */}
+						{anim === "shimmer" && (
+							<div
+								className="pointer-events-none absolute inset-0 w-[60%] h-full opacity-60"
+								style={{
+									background:
+										"linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.6) 50%, transparent 100%)",
+									animation: `recordly-highlight-shimmer ${(1.8 / speed).toFixed(2)}s cubic-bezier(0.4, 0, 0.2, 1) infinite`,
+								}}
+							/>
+						)}
+					</div>
+				);
+			}
+
 			default:
 				return null;
 		}
@@ -245,9 +361,19 @@ export function AnnotationOverlay({
 			style={{
 				zIndex: isSelectedBoost ? zIndex + 1000 : zIndex, // Boost selected annotation to ensure it's on top
 				pointerEvents: "auto",
-				border: isSelected ? "2px solid rgba(37, 99, 235, 0.8)" : "none",
-				backgroundColor: isSelected ? "rgba(37, 99, 235, 0.1)" : "transparent",
-				boxShadow: isSelected ? "0 0 0 1px rgba(37, 99, 235, 0.35)" : "none",
+				border: isSelected
+					? annotation.type === "highlight"
+						? "1px dashed rgba(37, 99, 235, 0.9)"
+						: "2px solid rgba(37, 99, 235, 0.8)"
+					: "none",
+				backgroundColor:
+					isSelected && annotation.type !== "highlight"
+						? "rgba(37, 99, 235, 0.1)"
+						: "transparent",
+				boxShadow:
+					isSelected && annotation.type !== "highlight"
+						? "0 0 0 1px rgba(37, 99, 235, 0.35)"
+						: "none",
 			}}
 			enableResizing={isSelected}
 			disableDragging={!isSelected}
@@ -300,7 +426,8 @@ export function AnnotationOverlay({
 					annotation.type === "text" && "bg-transparent",
 					annotation.type === "image" && "bg-transparent",
 					annotation.type === "figure" && "bg-transparent",
-					isSelected && "shadow-lg",
+					annotation.type === "highlight" && "bg-transparent",
+					isSelected && annotation.type !== "highlight" && "shadow-lg",
 				)}
 			>
 				{renderContent()}

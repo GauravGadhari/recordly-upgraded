@@ -4,17 +4,28 @@ import type {
 	AudioRegion,
 	CaptionCue,
 	ClipRegion,
+	KeystrokeEvent,
+	MemeRegion,
+	TransitionRegion,
+	ZoomOutRegion,
 	ZoomRegion,
 } from "../../types";
 import { getClipSourceEndMs, getClipSourceStartMs } from "../../types";
-import { CAPTION_ROW_ID, CLIP_ROW_ID, ZOOM_ROW_ID } from "../core/constants";
+import { CAPTION_ROW_ID, CLIP_ROW_ID, KEYSTROKE_ROW_ID, ZOOM_ROW_ID, ZOOM_OUT_ROW_ID } from "../core/constants";
 import {
 	getAnnotationTrackIndex,
 	getAnnotationTrackRowId,
 	getAudioTrackIndex,
 	getAudioTrackRowId,
+	getKeystrokeTrackRowId,
+	getMemeTrackIndex,
+	getMemeTrackRowId,
+	getTransitionTrackIndex,
+	getTransitionTrackRowId,
 	isAnnotationTrackRowId,
 	isAudioTrackRowId,
+	isMemeTrackRowId,
+	isTransitionTrackRowId,
 } from "../core/rows";
 import type { TimelineRegionSpan, TimelineRenderItem } from "../core/timelineTypes";
 
@@ -26,10 +37,23 @@ export function getAnnotationLabel(region: AnnotationRegion): string {
 	if (region.type === "image") {
 		return "Image";
 	}
+	if (region.type === "highlight") {
+		const anim = region.highlightData?.animation;
+		if (anim && anim !== "none") {
+			return `Highlight (${anim})`;
+		}
+		return "Highlight";
+	}
 	return "Annotation";
 }
 
 export function getAudioLabel(region: AudioRegion): string {
+	if (region.label && region.label.trim()) {
+		return region.label.trim();
+	}
+	if (!region.audioPath || region.audioPath.startsWith("data:")) {
+		return "Audio";
+	}
 	return (
 		region.audioPath
 			.split(/[\\/]/)
@@ -45,12 +69,26 @@ function getCaptionLabel(cue: CaptionCue): string {
 
 export function buildTimelineItems(params: {
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	clipRegions: ClipRegion[];
 	annotationRegions: AnnotationRegion[];
 	audioRegions: AudioRegion[];
 	captionCues?: CaptionCue[];
+	keystrokes?: KeystrokeEvent[];
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
 }): TimelineRenderItem[] {
-	const { zoomRegions, clipRegions, annotationRegions, audioRegions, captionCues = [] } = params;
+	const {
+		zoomRegions,
+		zoomOutRegions = [],
+		clipRegions,
+		annotationRegions,
+		audioRegions,
+		captionCues = [],
+		keystrokes = [],
+		transitionRegions: _transitionRegions = [],
+		memeRegions = [],
+	} = params;
 	const zooms: TimelineRenderItem[] = zoomRegions.map((region, index) => ({
 		id: region.id,
 		rowId: ZOOM_ROW_ID,
@@ -59,6 +97,14 @@ export function buildTimelineItems(params: {
 		zoomDepth: region.depth,
 		zoomMode: region.mode ?? "auto",
 		variant: "zoom",
+	}));
+
+	const zoomOuts: TimelineRenderItem[] = zoomOutRegions.map((region, index) => ({
+		id: region.id,
+		rowId: ZOOM_OUT_ROW_ID,
+		span: { start: region.startMs, end: region.endMs },
+		label: region.label || `Fit Screen ${index + 1}`,
+		variant: "zoom-out",
 	}));
 
 	const clips: TimelineRenderItem[] = clipRegions.map((region, index) => {
@@ -105,21 +151,80 @@ export function buildTimelineItems(params: {
 		label: getCaptionLabel(cue),
 		variant: "caption",
 	}));
+	// Distribute overlapping keystrokes across up to 2 layers on the timeline
+	const layerEndTimes = [0, 0];
+	const keypresses: TimelineRenderItem[] = keystrokes.map((event) => {
+		const start = event.timeMs;
+		const end = event.timeMs + Math.max(1, event.durationMs || 1500);
 
-	return [...zooms, ...clips, ...annotations, ...audios, ...captions];
+		let assignedLayer = 0;
+		if (start >= layerEndTimes[0]) {
+			assignedLayer = 0;
+			layerEndTimes[0] = end;
+		} else if (start >= layerEndTimes[1]) {
+			assignedLayer = 1;
+			layerEndTimes[1] = end;
+		} else {
+			assignedLayer = layerEndTimes[0] <= layerEndTimes[1] ? 0 : 1;
+			layerEndTimes[assignedLayer] = end;
+		}
+
+		return {
+			id: event.id,
+			rowId: assignedLayer === 0 ? KEYSTROKE_ROW_ID : getKeystrokeTrackRowId(1),
+			span: { start, end },
+			label: event.displayText || event.keys.join(" + ") || "Key",
+			variant: "keystroke",
+		};
+	});
+
+	const memes: TimelineRenderItem[] = memeRegions.map((region) => ({
+		id: region.id,
+		rowId: getMemeTrackRowId(region.trackIndex ?? 0),
+		span: { start: region.startMs, end: region.endMs },
+		label: region.name || "Meme",
+		variant: "meme",
+	}));
+
+	return [
+		...zooms,
+		...zoomOuts,
+		...clips,
+		...annotations,
+		...audios,
+		...captions,
+		...keypresses,
+		...memes,
+	];
 }
 
 export function buildAllRegionSpans(params: {
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	clipRegions: ClipRegion[];
 	audioRegions: AudioRegion[];
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
 }): TimelineRegionSpan[] {
-	const { zoomRegions, clipRegions, audioRegions } = params;
+	const {
+		zoomRegions,
+		zoomOutRegions = [],
+		clipRegions,
+		audioRegions,
+		transitionRegions = [],
+		memeRegions = [],
+	} = params;
 	const zooms = zoomRegions.map((r) => ({
 		id: r.id,
 		start: r.startMs,
 		end: r.endMs,
 		rowId: ZOOM_ROW_ID,
+	}));
+	const zoomOuts = zoomOutRegions.map((r) => ({
+		id: r.id,
+		start: r.startMs,
+		end: r.endMs,
+		rowId: ZOOM_OUT_ROW_ID,
 	}));
 	const clips = clipRegions.map((r) => ({
 		id: r.id,
@@ -133,7 +238,19 @@ export function buildAllRegionSpans(params: {
 		end: r.endMs,
 		rowId: getAudioTrackRowId(r.trackIndex ?? 0),
 	}));
-	return [...zooms, ...clips, ...audios];
+	const transitions = transitionRegions.map((r) => ({
+		id: r.id,
+		start: r.startMs,
+		end: r.endMs,
+		rowId: getTransitionTrackRowId(r.trackIndex ?? 0),
+	}));
+	const memes = memeRegions.map((r) => ({
+		id: r.id,
+		start: r.startMs,
+		end: r.endMs,
+		rowId: getMemeTrackRowId(r.trackIndex ?? 0),
+	}));
+	return [...zooms, ...zoomOuts, ...clips, ...audios, ...transitions, ...memes];
 }
 
 export function resolveDropRowId(
@@ -155,6 +272,18 @@ export function resolveDropRowId(
 	if (isAudioTrackRowId(currentRowId)) {
 		return isAudioTrackRowId(proposedRowId)
 			? getAudioTrackRowId(getAudioTrackIndex(proposedRowId))
+			: currentRowId;
+	}
+
+	if (isTransitionTrackRowId(currentRowId)) {
+		return isTransitionTrackRowId(proposedRowId)
+			? getTransitionTrackRowId(getTransitionTrackIndex(proposedRowId))
+			: currentRowId;
+	}
+
+	if (isMemeTrackRowId(currentRowId)) {
+		return isMemeTrackRowId(proposedRowId)
+			? getMemeTrackRowId(getMemeTrackIndex(proposedRowId))
 			: currentRowId;
 	}
 

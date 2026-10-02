@@ -41,6 +41,7 @@ export function useProjectLibraryController({
 		cropRegion,
 		cursorClickBounce,
 		cursorClickBounceDuration,
+		cursorClickDepth,
 		cursorClickEffect,
 		cursorClickEffectColor,
 		cursorClickEffectScale,
@@ -218,6 +219,7 @@ export function useProjectLibraryController({
 					cursorClickEffectDurationMs,
 					cursorClickBounce,
 					cursorClickBounceDuration,
+					cursorClickDepth,
 					cursorSway,
 				});
 				await frameRenderer.initialize();
@@ -290,6 +292,7 @@ export function useProjectLibraryController({
 		cropRegion,
 		cursorClickBounce,
 		cursorClickBounceDuration,
+		cursorClickDepth,
 		cursorClickEffect,
 		cursorClickEffectColor,
 		cursorClickEffectScale,

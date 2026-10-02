@@ -34,12 +34,19 @@ import {
 	stopCursorCapture,
 	writeCursorTelemetry,
 } from "../cursor/telemetry";
+import {
+	persistPendingKeystrokeTelemetry,
+	readKeystrokeTelemetry,
+	resetKeystrokeTracking,
+	writeKeystrokeTelemetry,
+} from "../cursor/keystrokeTelemetry";
 import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import { getMonitorHandles } from "../monitorResolver";
 import {
 	ensureNativeCaptureHelperBinary,
 	ensureSwiftHelperBinary,
 	getNativeCaptureHelperBinaryPath,
+	getLinuxCaptureBinaryPath,
 	getSystemCursorHelperBinaryPath,
 	getSystemCursorHelperSourcePath,
 	getWindowsCaptureExePath,
@@ -75,6 +82,12 @@ import {
 	waitForNativeCaptureStop,
 } from "../recording/mac";
 import { resolveRecordedVideoStoragePath } from "../recording/storagePath";
+import {
+	attachLinuxCaptureLifecycle,
+	isNativeLinuxCaptureAvailable,
+	waitForLinuxCaptureStart,
+	waitForLinuxCaptureStop,
+} from "../recording/linux";
 import {
 	attachWindowsCaptureLifecycle,
 	isNativeWindowsCaptureAvailable,
@@ -142,8 +155,24 @@ import {
 	windowsOrphanedMicAudioPath,
 	windowsPendingVideoPath,
 	windowsSystemAudioPath,
+	linuxCaptureOutputBuffer,
+	linuxCapturePaused,
+	linuxCaptureProcess,
+	linuxCaptureTargetPath,
+	linuxNativeCaptureActive,
+	setLinuxCaptureOutputBuffer,
+	setLinuxCapturePaused,
+	setLinuxCaptureProcess,
+	setLinuxCaptureStopRequested,
+	setLinuxCaptureTargetPath,
+	setLinuxNativeCaptureActive,
 } from "../state";
-import type { CursorTelemetryPoint, NativeMacRecordingOptions, SelectedSource } from "../types";
+import type {
+	CursorTelemetryPoint,
+	KeystrokeEvent,
+	NativeMacRecordingOptions,
+	SelectedSource,
+} from "../types";
 import {
 	getMacPrivacySettingsUrl,
 	getRecordingsDir,
@@ -659,6 +688,99 @@ export function registerRecordingHandlers(
 				}
 			}
 
+			// Linux native capture path (D-Bus ScreenCast portal with cursor_mode=1 [Hidden] + PipeWire)
+			if (process.platform === "linux") {
+				const linuxCaptureAvailable = await isNativeLinuxCaptureAvailable();
+				if (!linuxCaptureAvailable) {
+					return {
+						success: false,
+						message: "Native Linux capture is not available on this system.",
+					};
+				}
+
+				if (linuxCaptureProcess && !linuxNativeCaptureActive) {
+					try {
+						linuxCaptureProcess.kill();
+					} catch {
+						/* ignore */
+					}
+					setLinuxCaptureProcess(null);
+					setLinuxCaptureTargetPath(null);
+					setLinuxCaptureStopRequested(false);
+				}
+
+				if (linuxCaptureProcess) {
+					return {
+						success: false,
+						message: "A native Linux screen recording is already active.",
+					};
+				}
+
+				let lcProc: ChildProcessWithoutNullStreams | null = null;
+				try {
+					const binPath = getLinuxCaptureBinaryPath();
+					const recordingsDir = await getRecordingsDir();
+					const timestamp = Date.now();
+					const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`);
+
+					const config = {
+						outputPath,
+						fps: 60,
+						cursorMode: 1, // 1 = Hidden (omitted from video!)
+					};
+
+					setLinuxCaptureOutputBuffer("");
+					setLinuxCaptureTargetPath(outputPath);
+					setLinuxCaptureStopRequested(false);
+					setLinuxCapturePaused(false);
+
+					lcProc = spawn(binPath, [JSON.stringify(config)], {
+						cwd: recordingsDir,
+						stdio: ["pipe", "pipe", "pipe"],
+						env: process.env,
+					});
+					setLinuxCaptureProcess(lcProc);
+					attachLinuxCaptureLifecycle(lcProc);
+
+					lcProc.stdout.on("data", (chunk: Buffer) => {
+						const msg = chunk.toString();
+						setLinuxCaptureOutputBuffer(linuxCaptureOutputBuffer + msg);
+					});
+					lcProc.stderr.on("data", (chunk: Buffer) => {
+						const msg = chunk.toString();
+						setLinuxCaptureOutputBuffer(linuxCaptureOutputBuffer + msg);
+					});
+
+					await waitForLinuxCaptureStart(lcProc);
+					setLinuxNativeCaptureActive(true);
+					setNativeScreenRecordingActive(true);
+
+					return {
+						success: true,
+						// Tell the renderer to record microphone via browser WebRTC sidecar
+						microphoneFallbackRequired: Boolean(options?.capturesMicrophone),
+					};
+				} catch (error) {
+					console.error("Failed to start native Linux capture:", error);
+					try {
+						if (lcProc) lcProc.kill();
+					} catch {
+						/* ignore */
+					}
+					setLinuxNativeCaptureActive(false);
+					setNativeScreenRecordingActive(false);
+					setLinuxCaptureProcess(null);
+					setLinuxCaptureTargetPath(null);
+					setLinuxCaptureStopRequested(false);
+					setLinuxCapturePaused(false);
+					return {
+						success: false,
+						message: "Failed to start native Linux capture",
+						error: String(error),
+					};
+				}
+			}
+
 			if (process.platform !== "darwin") {
 				return {
 					success: false,
@@ -1039,6 +1161,14 @@ export function registerRecordingHandlers(
 							error,
 						);
 					}
+					try {
+						await persistPendingKeystrokeTelemetry(finalVideoPath);
+					} catch (error) {
+						console.warn(
+							"Failed to persist keystroke telemetry during native stop:",
+							error,
+						);
+					}
 
 					return { success: true, path: finalVideoPath };
 				} catch (error) {
@@ -1133,6 +1263,57 @@ export function registerRecordingHandlers(
 					return {
 						success: false,
 						message: "Failed to stop native Windows capture",
+						error: String(error),
+					};
+				}
+			}
+
+			// Linux native capture stop path
+			if (process.platform === "linux" && linuxNativeCaptureActive) {
+				try {
+					if (!linuxCaptureProcess) {
+						throw new Error("Native Linux capture process is not running");
+					}
+
+					const proc = linuxCaptureProcess;
+					const preferredVideoPath = linuxCaptureTargetPath;
+					setLinuxCaptureStopRequested(true);
+					proc.stdin.write("stop\n");
+					const stoppedPath = await waitForLinuxCaptureStop(proc);
+					const finalVideoPath = preferredVideoPath ?? stoppedPath;
+
+					await validateRecordedVideo(finalVideoPath);
+
+					setLinuxCaptureProcess(null);
+					setLinuxNativeCaptureActive(false);
+					setNativeScreenRecordingActive(false);
+					setLinuxCaptureTargetPath(null);
+					setLinuxCaptureStopRequested(false);
+					setLinuxCapturePaused(false);
+
+					return await finalizeStoredVideo(finalVideoPath);
+				} catch (error) {
+					console.error("Failed to stop native Linux capture:", error);
+					const fallbackPath = linuxCaptureTargetPath;
+					setLinuxNativeCaptureActive(false);
+					setNativeScreenRecordingActive(false);
+					setLinuxCaptureProcess(null);
+					setLinuxCaptureTargetPath(null);
+					setLinuxCaptureStopRequested(false);
+					setLinuxCapturePaused(false);
+
+					if (fallbackPath) {
+						try {
+							await fs.access(fallbackPath);
+							return await finalizeStoredVideo(fallbackPath);
+						} catch {
+							// fallback file absent
+						}
+					}
+
+					return {
+						success: false,
+						message: "Failed to stop native Linux capture",
 						error: String(error),
 					};
 				}
@@ -1331,6 +1512,28 @@ export function registerRecordingHandlers(
 			}
 		}
 
+		if (process.platform === "linux") {
+			if (!linuxNativeCaptureActive || !linuxCaptureProcess) {
+				return { success: false, message: "No native Linux screen recording is active." };
+			}
+
+			if (linuxCapturePaused) {
+				return { success: true };
+			}
+
+			try {
+				linuxCaptureProcess.stdin.write("pause\n");
+				setLinuxCapturePaused(true);
+				return { success: true };
+			} catch (error) {
+				return {
+					success: false,
+					message: "Failed to pause native Linux capture",
+					error: String(error),
+				};
+			}
+		}
+
 		if (process.platform !== "darwin") {
 			return {
 				success: false,
@@ -1387,6 +1590,28 @@ export function registerRecordingHandlers(
 			}
 		}
 
+		if (process.platform === "linux") {
+			if (!linuxNativeCaptureActive || !linuxCaptureProcess) {
+				return { success: false, message: "No native Linux screen recording is active." };
+			}
+
+			if (!linuxCapturePaused) {
+				return { success: true };
+			}
+
+			try {
+				linuxCaptureProcess.stdin.write("resume\n");
+				setLinuxCapturePaused(false);
+				return { success: true };
+			} catch (error) {
+				return {
+					success: false,
+					message: "Failed to resume native Linux capture",
+					error: String(error),
+				};
+			}
+		}
+
 		if (process.platform !== "darwin") {
 			return {
 				success: false,
@@ -1431,6 +1656,10 @@ export function registerRecordingHandlers(
 
 	ipcMain.handle("is-native-windows-capture-available", async () => {
 		return { available: await isNativeWindowsCaptureAvailable() };
+	});
+
+	ipcMain.handle("is-native-linux-capture-available", async () => {
+		return { available: await isNativeLinuxCaptureAvailable() };
 	});
 
 	ipcMain.handle("get-last-native-capture-diagnostics", async () => {
@@ -1863,23 +2092,35 @@ export function registerRecordingHandlers(
 		}
 	});
 
-	ipcMain.handle("set-recording-state", (_, recording: boolean) => {
-		if (recording) {
-			stopCursorCapture();
-			stopInteractionCapture();
-			startWindowBoundsCapture();
-			void startNativeCursorMonitor();
-			setIsCursorCaptureActive(true);
-			setActiveCursorSamples([]);
-			setPendingCursorSamples([]);
-			setCursorCaptureStartTimeMs(Date.now());
-			resetCursorCaptureClock();
-			setLinuxCursorScreenPoint(null);
-			setLastLeftClick(null);
-			sampleCursorPoint();
-			startCursorSampling();
-			void startInteractionCapture();
-		} else {
+	ipcMain.handle("warmup-cursor-monitor", async () => {
+		try {
+			await startNativeCursorMonitor();
+			return { success: true };
+		} catch (error) {
+			console.warn("Failed to warm up cursor monitor:", error);
+			return { success: false, error: String(error) };
+		}
+	});
+
+	ipcMain.handle(
+		"set-recording-state",
+		(_, recording: boolean, options?: { startTimeMs?: number }) => {
+			if (recording) {
+				stopCursorCapture();
+				stopInteractionCapture();
+				startWindowBoundsCapture();
+				void startNativeCursorMonitor();
+				setIsCursorCaptureActive(true);
+				setActiveCursorSamples([]);
+				setPendingCursorSamples([]);
+				setCursorCaptureStartTimeMs(options?.startTimeMs ?? Date.now());
+				resetCursorCaptureClock();
+				setLastLeftClick(null);
+				sampleCursorPoint();
+				startCursorSampling();
+				resetKeystrokeTracking();
+				void startInteractionCapture();
+			} else {
 			setIsCursorCaptureActive(false);
 			stopCursorCapture();
 			stopInteractionCapture();
@@ -1968,6 +2209,54 @@ export function registerRecordingHandlers(
 					success: false,
 					samples: [],
 					message: "Failed to save cursor telemetry",
+					error: String(error),
+				};
+			}
+		},
+	);
+
+	ipcMain.handle("get-keystrokes", async (_, videoPath?: string) => {
+		const targetVideoPath = normalizeVideoSourcePath(videoPath ?? currentVideoPath);
+		if (!targetVideoPath) {
+			return { success: true, events: [] };
+		}
+
+		try {
+			const events = await readKeystrokeTelemetry(targetVideoPath);
+			return { success: true, events };
+		} catch (error) {
+			console.error("Failed to load keystroke telemetry:", error);
+			return {
+				success: false,
+				message: "Failed to load keystroke telemetry",
+				error: String(error),
+				events: [],
+			};
+		}
+	});
+
+	ipcMain.handle(
+		"set-keystrokes",
+		async (_, videoPath: string | undefined, events: KeystrokeEvent[]) => {
+			const targetVideoPath = normalizeVideoSourcePath(videoPath ?? currentVideoPath);
+			if (!targetVideoPath) {
+				return {
+					success: false,
+					events: [],
+					message: "No video path available for keystroke telemetry",
+					error: "Missing video path",
+				};
+			}
+
+			try {
+				const savedEvents = await writeKeystrokeTelemetry(targetVideoPath, events);
+				return { success: true, events: savedEvents };
+			} catch (error) {
+				console.error("Failed to save keystroke telemetry:", error);
+				return {
+					success: false,
+					events: [],
+					message: "Failed to save keystroke telemetry",
 					error: String(error),
 				};
 			}

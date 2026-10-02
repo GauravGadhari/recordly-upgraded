@@ -33,6 +33,9 @@ import { type AspectRatio, formatAspectRatioForCSS } from "@/utils/aspectRatioUt
 import { AnnotationOverlay } from "./AnnotationOverlay";
 import { type CaptionEditTarget, normalizeCaptionEditText } from "./captionEditing";
 import { buildActiveCaptionLayout } from "./captionLayout";
+import { KeystrokeOverlay } from "./videoPlayback/KeystrokeOverlay";
+import { MemeOverlay } from "./videoPlayback/MemeOverlay";
+import { TransitionOverlay } from "./videoPlayback/TransitionOverlay";
 import {
 	CAPTION_FONT_WEIGHT,
 	CAPTION_LINE_HEIGHT,
@@ -49,11 +52,15 @@ import {
 	type ClipRegion,
 	type CursorClickEffectStyle,
 	type CursorStyle,
+	type KeystrokeEvent,
+	type KeystrokeVisualSettings,
+	type MemeRegion,
 	DEFAULT_CONNECTED_ZOOM_DURATION_MS,
 	DEFAULT_CONNECTED_ZOOM_EASING,
 	DEFAULT_CONNECTED_ZOOM_GAP_MS,
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+	DEFAULT_CURSOR_CLICK_DEPTH,
 	DEFAULT_CURSOR_CLICK_EFFECT,
 	DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
@@ -80,10 +87,13 @@ import {
 	getDefaultCaptionFontFamily,
 	mapTimelineTimeToSourceTime,
 	type Padding,
+	type TransitionRegion,
+	type VerticalTrackingMode,
 	type WebcamOverlaySettings,
 	type ZoomDepth,
 	type ZoomFocus,
 	type ZoomMotionBlurTuning,
+	type ZoomOutRegion,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
 } from "./types";
@@ -229,8 +239,11 @@ interface VideoPlaybackProps {
 	onError: (error: string) => void;
 	wallpaper?: string;
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	selectedZoomId: string | null;
+	selectedZoomOutId?: string | null;
 	onSelectZoom: (id: string | null) => void;
+	onSelectZoomOut?: (id: string | null) => void;
 	onZoomFocusChange: (id: string, focus: ZoomFocus) => void;
 	isPlaying: boolean;
 	showShadow?: boolean;
@@ -251,9 +264,12 @@ interface VideoPlaybackProps {
 	webcam?: WebcamOverlaySettings;
 	webcamVideoPath?: string | null;
 	aspectRatio: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	annotationRegions?: AnnotationRegion[];
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
+	keystrokes?: KeystrokeEvent[];
+	keystrokeSettings?: KeystrokeVisualSettings;
 	onEditAutoCaption?: (target: CaptionEditTarget, text: string) => void;
 	selectedAnnotationId?: string | null;
 	onSelectAnnotation?: (id: string | null) => void;
@@ -282,9 +298,16 @@ interface VideoPlaybackProps {
 	cursorClickEffectDurationMs?: number;
 	cursorClickBounce?: number;
 	cursorClickBounceDuration?: number;
+	cursorClickDepth?: number;
 	cursorSway?: number;
 	volume?: number;
 	suspendRendering?: boolean;
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
+	selectedMemeId?: string | null;
+	onSelectMeme?: (id: string | null) => void;
+	onMemePositionChange?: (id: string, position: { x: number; y: number }) => void;
+	onMemeSizeChange?: (id: string, size: { width: number; height: number }) => void;
 }
 
 export interface VideoPlaybackRef {
@@ -314,8 +337,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			onError,
 			wallpaper,
 			zoomRegions,
+			zoomOutRegions,
 			selectedZoomId,
+			selectedZoomOutId: _selectedZoomOutId,
 			onSelectZoom,
+			onSelectZoomOut: _onSelectZoomOut,
 			onZoomFocusChange,
 			isPlaying,
 			showShadow,
@@ -336,9 +362,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			webcam,
 			webcamVideoPath,
 			aspectRatio,
+			verticalTrackingMode = "auto-follow",
 			annotationRegions = [],
 			autoCaptions = [],
 			autoCaptionSettings,
+			keystrokes = [],
+			keystrokeSettings,
 			onEditAutoCaption,
 			selectedAnnotationId,
 			onSelectAnnotation,
@@ -367,9 +396,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			cursorClickEffectDurationMs = DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
 			cursorClickBounce = DEFAULT_CURSOR_CLICK_BOUNCE,
 			cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+			cursorClickDepth = DEFAULT_CURSOR_CLICK_DEPTH,
 			cursorSway = DEFAULT_CURSOR_SWAY,
 			volume = 1,
 			suspendRendering = false,
+			transitionRegions = [],
+			memeRegions = [],
+			selectedMemeId = null,
+			onSelectMeme,
+			onMemePositionChange,
+			onMemeSizeChange,
 		},
 		ref,
 	) => {
@@ -444,6 +480,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			clipPlaybackRef.current?.refresh();
 		}, [clipRegions]);
 		const zoomRegionsRef = useRef<ZoomRegion[]>([]);
+		const zoomOutRegionsRef = useRef<ZoomOutRegion[]>([]);
 		const selectedZoomIdRef = useRef<string | null>(null);
 		const animationStateRef = useRef<PlaybackAnimationState>(createPlaybackAnimationState());
 		const isDraggingFocusRef = useRef(false);
@@ -508,9 +545,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const cursorClickEffectDurationMsRef = useRef(cursorClickEffectDurationMs);
 		const cursorClickBounceRef = useRef(cursorClickBounce);
 		const cursorClickBounceDurationRef = useRef(cursorClickBounceDuration);
+		const cursorClickDepthRef = useRef(cursorClickDepth);
 		const cursorSwayRef = useRef(cursorSway);
 		const zoomMotionBlurRef = useRef(zoomMotionBlur);
 		const zoomMotionBlurTuningRef = useRef(zoomMotionBlurTuning);
+		const aspectRatioRef = useRef(aspectRatio);
+		aspectRatioRef.current = aspectRatio;
+		const verticalTrackingModeRef = useRef(verticalTrackingMode);
+		verticalTrackingModeRef.current = verticalTrackingMode;
 
 		// Spring animation state for smooth zoom transitions
 		const springScaleRef = useRef<SpringState>(createSpringState(1));
@@ -1219,8 +1261,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 		useEffect(() => {
 			zoomRegionsRef.current = zoomRegions;
+			zoomOutRegionsRef.current = zoomOutRegions ?? [];
 			requestPausedFrameRefresh();
-		}, [zoomRegions, requestPausedFrameRefresh]);
+		}, [zoomRegions, zoomOutRegions, requestPausedFrameRefresh]);
 
 		useEffect(() => {
 			selectedZoomIdRef.current = selectedZoomId;
@@ -1420,6 +1463,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [cursorTelemetry, requestPausedFrameRefresh]);
 
 		useEffect(() => {
+			aspectRatioRef.current = aspectRatio;
+			requestPausedFrameRefresh();
+		}, [aspectRatio, requestPausedFrameRefresh]);
+
+		useEffect(() => {
+			verticalTrackingModeRef.current = verticalTrackingMode;
+			requestPausedFrameRefresh();
+		}, [verticalTrackingMode, requestPausedFrameRefresh]);
+
+		useEffect(() => {
 			showCursorRef.current = showCursor;
 			requestPausedFrameRefresh();
 		}, [showCursor, requestPausedFrameRefresh]);
@@ -1522,6 +1575,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		useEffect(() => {
 			cursorClickBounceDurationRef.current = cursorClickBounceDuration;
 		}, [cursorClickBounceDuration]);
+
+		useEffect(() => {
+			cursorClickDepthRef.current = cursorClickDepth;
+		}, [cursorClickDepth]);
 
 		useEffect(() => {
 			cursorSwayRef.current = cursorSway;
@@ -2026,6 +2083,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 				const target = resolveSceneZoomTarget({
 					zoomRegions: zoomRegionsRef.current,
+					zoomOutRegions: zoomOutRegionsRef.current,
 					timeMs: timelineTimeRef.current * 1000,
 					cursorTimeMs: currentTimeRef.current,
 					connectZooms: connectZoomsRef.current,
@@ -2034,6 +2092,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					zoomClassicMode: zoomClassicModeRef.current,
 					cursorTelemetry: cursorTelemetryRef.current,
 					cursorFollowCamera: cursorFollowCameraRef.current,
+					aspectRatio: aspectRatioRef.current,
+					verticalTrackingMode: verticalTrackingModeRef.current,
+					stageSize: stageSizeRef.current,
+					baseMask: baseMaskRef.current,
 				});
 
 				const state = animationStateRef.current;
@@ -2153,6 +2215,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			overlay.setClickEffectDurationMs(cursorClickEffectDurationMs);
 			overlay.setClickBounce(cursorClickBounce);
 			overlay.setClickBounceDuration(cursorClickBounceDuration);
+			overlay.setClickDepth(cursorClickDepth);
 			overlay.setSway(cursorSway);
 
 			void (async () => {
@@ -2189,6 +2252,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			cursorClickEffectDurationMs,
 			cursorClickBounce,
 			cursorClickBounceDuration,
+			cursorClickDepth,
 			cursorSway,
 		]);
 
@@ -2668,6 +2732,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								</div>
 							</div>
 						) : null}
+						{!isGap && keystrokeSettings?.enabled ? (
+							<KeystrokeOverlay
+								currentTimeMs={currentTime * 1000}
+								keystrokes={keystrokes}
+								settings={keystrokeSettings}
+							/>
+						) : null}
 						<div
 							className="absolute inset-0"
 							style={{
@@ -2765,6 +2836,26 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						</div>
 					</div>
 				)}
+				{/* Meme / transition layers composite above the Pixi stage and the
+					annotation overlay; the exporter mirrors this stacking order. */}
+				{memeRegions.length > 0 ? (
+					<MemeOverlay
+						memeRegions={memeRegions}
+						currentTimeMs={timelineTime * 1000}
+						isPlaying={isPlaying}
+						selectedMemeId={selectedMemeId}
+						onSelectMeme={onSelectMeme}
+						onPositionChange={onMemePositionChange}
+						onSizeChange={onMemeSizeChange}
+					/>
+				) : null}
+				{transitionRegions.length > 0 ? (
+					<TransitionOverlay
+						transitionRegions={transitionRegions}
+						currentTimeMs={timelineTime * 1000}
+						isPlaying={isPlaying}
+					/>
+				) : null}
 				{/* Keep the source video off-screen instead of display:none so the
 					browser continues producing presented frames for Pixi and preview sync. */}
 				<video

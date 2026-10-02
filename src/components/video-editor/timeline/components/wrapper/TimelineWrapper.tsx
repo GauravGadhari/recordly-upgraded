@@ -114,7 +114,8 @@ export default function TimelineWrapper({
 				el.style.opacity = "0";
 				return;
 			}
-			el.textContent = `${formatTooltipMs(span.start)} – ${formatTooltipMs(span.end)}`;
+			const durSec = Math.max(0, (span.end - span.start) / 1000).toFixed(2);
+			el.textContent = `In: ${formatTooltipMs(span.start)} | Out: ${formatTooltipMs(span.end)} (${durSec}s)`;
 			el.style.opacity = "1";
 			if (screenX !== undefined) {
 				const parent = el.parentElement;
@@ -271,8 +272,8 @@ export default function TimelineWrapper({
 				{/* Floating tooltip shown during drag/resize */}
 				<div
 					ref={tooltipRef}
-					className="absolute top-1 pointer-events-none z-[60] px-1.5 py-0.5 rounded bg-editor-bg/90 text-[10px] text-foreground/90 font-medium tabular-nums whitespace-nowrap border border-foreground/10 shadow-lg"
-					style={{ opacity: 0, transition: "opacity 0.1s" }}
+					className="absolute top-1 pointer-events-none z-[60] px-2.5 py-1 rounded-md bg-[#181820]/95 backdrop-blur-md text-[11px] text-white/95 font-medium tabular-nums whitespace-nowrap border border-white/15 shadow-xl transition-opacity duration-75"
+					style={{ opacity: 0 }}
 				/>
 			</div>
 		</TimelineContext>

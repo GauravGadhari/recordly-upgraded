@@ -7,17 +7,24 @@ import type {
 	CaptionCue,
 	ClipRegion,
 	CursorTelemetryPoint,
+	KeystrokeEvent,
+	KeystrokeVisualSettings,
+	MemeRegion,
 	SpeedRegion,
+	TransitionRegion,
 	TrimRegion,
+	ZoomOutRegion,
 	ZoomRegion,
 } from "../types";
-import { DEFAULT_AUTO_CAPTION_SETTINGS } from "../types";
+import { DEFAULT_AUTO_CAPTION_SETTINGS, DEFAULT_KEYSTROKE_SETTINGS } from "../types";
 
 export function useTimelineState() {
 	const [zoomRegions, setZoomRegions] = useState<ZoomRegion[]>([]);
+	const [zoomOutRegions, setZoomOutRegions] = useState<ZoomOutRegion[]>([]);
 	const [cursorTelemetry, setCursorTelemetry] = useState<CursorTelemetryPoint[]>([]);
 	const [cursorTelemetrySourcePath, setCursorTelemetrySourcePath] = useState<string | null>(null);
 	const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
+	const [selectedZoomOutId, setSelectedZoomOutId] = useState<string | null>(null);
 	const [trimRegions, setTrimRegions] = useState<TrimRegion[]>([]);
 	const [clipRegions, setClipRegions] = useState<ClipRegion[]>([]);
 	const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -38,16 +45,28 @@ export function useTimelineState() {
 	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(
 		DEFAULT_AUTO_CAPTION_SETTINGS,
 	);
+	const [keystrokes, setKeystrokes] = useState<KeystrokeEvent[]>([]);
+	const [keystrokeSettings, setKeystrokeSettings] = useState<KeystrokeVisualSettings>(
+		DEFAULT_KEYSTROKE_SETTINGS,
+	);
+	const [transitionRegions, setTransitionRegions] = useState<TransitionRegion[]>([]);
+	const [selectedTransitionId, setSelectedTransitionId] = useState<string | null>(null);
+	const [memeRegions, setMemeRegions] = useState<MemeRegion[]>([]);
+	const [selectedMemeId, setSelectedMemeId] = useState<string | null>(null);
 
 	return {
 		zoomRegions,
 		setZoomRegions,
+		zoomOutRegions,
+		setZoomOutRegions,
 		cursorTelemetry,
 		setCursorTelemetry,
 		cursorTelemetrySourcePath,
 		setCursorTelemetrySourcePath,
 		selectedZoomId,
 		setSelectedZoomId,
+		selectedZoomOutId,
+		setSelectedZoomOutId,
 		trimRegions,
 		setTrimRegions,
 		clipRegions,
@@ -78,5 +97,17 @@ export function useTimelineState() {
 		setAutoCaptions,
 		autoCaptionSettings,
 		setAutoCaptionSettings,
+		keystrokes,
+		setKeystrokes,
+		keystrokeSettings,
+		setKeystrokeSettings,
+		transitionRegions,
+		setTransitionRegions,
+		selectedTransitionId,
+		setSelectedTransitionId,
+		memeRegions,
+		setMemeRegions,
+		selectedMemeId,
+		setSelectedMemeId,
 	};
 }

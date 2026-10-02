@@ -1,4 +1,4 @@
-import type { ZoomFocus, ZoomRegion } from "../types";
+import type { ZoomFocus, ZoomOutRegion, ZoomRegion } from "../types";
 import { ZOOM_DEPTH_SCALES } from "../types";
 import {
 	TRANSITION_WINDOW_MS,
@@ -35,7 +35,7 @@ type ConnectedPanTransition = {
 };
 
 export function computeRegionStrength(
-	region: ZoomRegion,
+	region: { startMs: number; endMs: number },
 	timeMs: number,
 	options: Pick<DominantRegionOptions, "zoomInDurationMs" | "zoomOutDurationMs"> = {},
 ) {
@@ -207,4 +207,24 @@ export function findDominantRegion(
 	return activeRegion
 		? { ...activeRegion, transition: null }
 		: { region: null, strength: 0, blendedScale: null, transition: null };
+}
+
+export function findDominantZoomOutStrength(
+	zoomOutRegions: ZoomOutRegion[] | undefined,
+	timeMs: number,
+	options: Pick<DominantRegionOptions, "zoomInDurationMs" | "zoomOutDurationMs"> = {},
+): number {
+	if (!zoomOutRegions || zoomOutRegions.length === 0) {
+		return 0;
+	}
+
+	let maxStrength = 0;
+	for (const region of zoomOutRegions) {
+		const strength = computeRegionStrength(region, timeMs, options);
+		if (strength > maxStrength) {
+			maxStrength = strength;
+		}
+	}
+
+	return maxStrength;
 }

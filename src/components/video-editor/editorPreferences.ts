@@ -45,11 +45,14 @@ type PersistedEditorControls = Pick<
 	| "cursorClickEffectDurationMs"
 	| "cursorClickBounce"
 	| "cursorClickBounceDuration"
+	| "cursorClickDepth"
 	| "cursorSway"
+	| "cursorSfx"
 	| "borderRadius"
 	| "padding"
 	| "webcam"
 	| "aspectRatio"
+	| "verticalTrackingMode"
 	| "exportEncodingMode"
 	| "exportBackendPreference"
 	| "exportPipelineModel"
@@ -133,12 +136,14 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	cursorClickEffectDurationMs: DEFAULT_EDITOR_CONTROLS.cursorClickEffectDurationMs,
 	cursorClickBounce: DEFAULT_EDITOR_CONTROLS.cursorClickBounce,
 	cursorClickBounceDuration: DEFAULT_EDITOR_CONTROLS.cursorClickBounceDuration,
+	cursorClickDepth: DEFAULT_EDITOR_CONTROLS.cursorClickDepth,
 	cursorSway: DEFAULT_EDITOR_CONTROLS.cursorSway,
 	borderRadius: DEFAULT_EDITOR_CONTROLS.borderRadius,
 	borderRadiusUnit: "percent",
 	padding: DEFAULT_EDITOR_CONTROLS.padding,
 	webcam: DEFAULT_EDITOR_CONTROLS.webcam,
 	aspectRatio: DEFAULT_EDITOR_CONTROLS.aspectRatio,
+	verticalTrackingMode: DEFAULT_EDITOR_CONTROLS.verticalTrackingMode ?? "auto-follow",
 	exportEncodingMode: DEFAULT_EDITOR_CONTROLS.exportEncodingMode,
 	exportBackendPreference: DEFAULT_EDITOR_CONTROLS.exportBackendPreference,
 	exportPipelineModel: DEFAULT_EDITOR_CONTROLS.exportPipelineModel,
@@ -339,11 +344,14 @@ function normalizeEditorControls(
 		cursorClickBounce: sanitizedRaw.cursorClickBounce ?? fallback.cursorClickBounce,
 		cursorClickBounceDuration:
 			sanitizedRaw.cursorClickBounceDuration ?? fallback.cursorClickBounceDuration,
+		cursorClickDepth: sanitizedRaw.cursorClickDepth ?? fallback.cursorClickDepth,
 		cursorSway: sanitizedRaw.cursorSway ?? fallback.cursorSway,
 		borderRadius: sanitizedRaw.borderRadius ?? fallback.borderRadius,
 		padding: sanitizedRaw.padding ?? fallback.padding,
 		webcam: sanitizedRaw.webcam ?? fallback.webcam,
 		aspectRatio: sanitizedRaw.aspectRatio ?? fallback.aspectRatio,
+		verticalTrackingMode:
+			sanitizedRaw.verticalTrackingMode ?? fallback.verticalTrackingMode,
 		exportEncodingMode: sanitizedRaw.exportEncodingMode ?? fallback.exportEncodingMode,
 		exportBackendPreference:
 			sanitizedRaw.exportBackendPreference === undefined
@@ -400,11 +408,13 @@ function normalizeEditorControls(
 		cursorClickEffectDurationMs: normalized.cursorClickEffectDurationMs,
 		cursorClickBounce: normalized.cursorClickBounce,
 		cursorClickBounceDuration: normalized.cursorClickBounceDuration,
+		cursorClickDepth: normalized.cursorClickDepth,
 		cursorSway: normalized.cursorSway,
 		borderRadius: normalized.borderRadius,
 		padding: normalized.padding,
 		webcam: normalized.webcam,
 		aspectRatio: normalized.aspectRatio,
+		verticalTrackingMode: normalized.verticalTrackingMode,
 		exportEncodingMode: normalized.exportEncodingMode,
 		exportBackendPreference: normalized.exportBackendPreference,
 		exportPipelineModel: normalized.exportPipelineModel,

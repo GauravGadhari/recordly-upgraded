@@ -12,10 +12,13 @@ interface UseTimelineKeyboardShortcutsParams {
 	annotationCount: number;
 	selectedKeyframeId: string | null;
 	selectedZoomId: string | null;
+	selectedZoomOutId?: string | null;
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
 	selectedAudioId?: string | null;
 	selectedCaptionId?: string | null;
+	selectedTransitionId?: string | null;
+	selectedMemeId?: string | null;
 	selectAllBlocksActive: boolean;
 	addKeyframe: () => void;
 	handleAddZoom: () => void;
@@ -23,10 +26,13 @@ interface UseTimelineKeyboardShortcutsParams {
 	handleAddAnnotation: () => void;
 	deleteSelectedKeyframe: () => void;
 	deleteSelectedZoom: () => void;
+	deleteSelectedZoomOut?: () => void;
 	deleteSelectedClip: () => void;
 	deleteSelectedAnnotation: () => void;
 	deleteSelectedAudio: () => void;
 	deleteSelectedCaption: () => void;
+	deleteSelectedTransition: () => void;
+	deleteSelectedMeme: () => void;
 	cycleAnnotationsAtCurrentTime: (backward?: boolean) => boolean;
 }
 
@@ -39,10 +45,13 @@ export function useTimelineKeyboardShortcuts({
 	annotationCount,
 	selectedKeyframeId,
 	selectedZoomId,
+	selectedZoomOutId,
 	selectedClipId,
 	selectedAnnotationId,
 	selectedAudioId,
 	selectedCaptionId,
+	selectedTransitionId,
+	selectedMemeId,
 	selectAllBlocksActive,
 	addKeyframe,
 	handleAddZoom,
@@ -50,10 +59,13 @@ export function useTimelineKeyboardShortcuts({
 	handleAddAnnotation,
 	deleteSelectedKeyframe,
 	deleteSelectedZoom,
+	deleteSelectedZoomOut,
 	deleteSelectedClip,
 	deleteSelectedAnnotation,
 	deleteSelectedAudio,
 	deleteSelectedCaption,
+	deleteSelectedTransition,
+	deleteSelectedMeme,
 	cycleAnnotationsAtCurrentTime,
 }: UseTimelineKeyboardShortcutsParams) {
 	useEffect(() => {
@@ -110,10 +122,13 @@ export function useTimelineKeyboardShortcuts({
 					selectAllBlocksActive,
 					selectedKeyframeId,
 					selectedZoomId,
+					selectedZoomOutId,
 					selectedClipId,
 					selectedAnnotationId,
 					selectedAudioId,
 					selectedCaptionId,
+					selectedTransitionId,
+					selectedMemeId,
 				});
 				if (target !== "none") {
 					e.preventDefault();
@@ -122,6 +137,8 @@ export function useTimelineKeyboardShortcuts({
 					deleteSelectedKeyframe();
 				} else if (target === "zoom") {
 					deleteSelectedZoom();
+				} else if (target === "zoom-out") {
+					deleteSelectedZoomOut?.();
 				} else if (target === "clip") {
 					deleteSelectedClip();
 				} else if (target === "annotation") {
@@ -130,6 +147,10 @@ export function useTimelineKeyboardShortcuts({
 					deleteSelectedAudio();
 				} else if (target === "caption") {
 					deleteSelectedCaption();
+				} else if (target === "transition") {
+					deleteSelectedTransition();
+				} else if (target === "meme") {
+					deleteSelectedMeme();
 				}
 			}
 		};
@@ -146,7 +167,10 @@ export function useTimelineKeyboardShortcuts({
 		deleteSelectedCaption,
 		deleteSelectedClip,
 		deleteSelectedKeyframe,
+		deleteSelectedTransition,
+		deleteSelectedMeme,
 		deleteSelectedZoom,
+		deleteSelectedZoomOut,
 		handleAddAnnotation,
 		handleAddZoom,
 		handleSplitClip,
@@ -160,6 +184,9 @@ export function useTimelineKeyboardShortcuts({
 		selectedCaptionId,
 		selectedClipId,
 		selectedKeyframeId,
+		selectedTransitionId,
+		selectedMemeId,
 		selectedZoomId,
+		selectedZoomOutId,
 	]);
 }

@@ -19,13 +19,20 @@ import type {
 	CursorClickEffectStyle,
 	CursorStyle,
 	CursorTelemetryPoint,
+	KeystrokeEvent,
+	KeystrokeVisualSettings,
+	MemeRegion,
 	Padding,
 	SpeedRegion,
+	TransitionRegion,
+	VerticalTrackingMode,
 	WebcamOverlaySettings,
 	ZoomMotionBlurTuning,
+	ZoomOutRegion,
 	ZoomRegion,
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import {
 	DEFAULT_WEBCAM_ROUNDNESS,
 	getDefaultCaptionFontFamily,
@@ -76,6 +83,13 @@ import {
 	getEffectiveVideoStreamDurationSeconds,
 } from "@/lib/mediaTiming";
 import {
+	drawActiveMemes,
+	drawActiveTransitions,
+	hasActiveMeme,
+	hasActiveTransition,
+	OverlayVideoPool,
+} from "./mediaOverlayRenderer";
+import {
 	destroyPixiApplication,
 	initializePixiApplicationWithTimeout,
 } from "@/lib/pixiApplicationLifecycle";
@@ -86,6 +100,12 @@ import {
 	renderAnnotations,
 	renderAnnotationToCanvas,
 } from "./annotationRenderer";
+import {
+	type ActiveKeystrokeEntry,
+	buildMultiKeystrokeLayout,
+	getActiveKeystrokeEvents,
+	getKeystrokeTheme,
+} from "./keystrokeRenderer";
 import { ForwardFrameSource } from "./forwardFrameSource";
 import { resolveMediaElementSource } from "./localMediaSource";
 import {
@@ -103,6 +123,7 @@ interface FrameRenderConfig {
 	preferredRenderBackend?: ExportRenderBackend;
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
+	zoomOutRegions?: ZoomOutRegion[];
 	showShadow: boolean;
 	shadowIntensity: number;
 	backgroundBlur: number;
@@ -119,6 +140,8 @@ interface FrameRenderConfig {
 	connectedZoomEasing?: ZoomTransitionEasing;
 	borderRadius?: number;
 	padding?: Padding | number;
+	aspectRatio?: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	cropRegion: CropRegion;
 	webcam?: WebcamOverlaySettings;
 	webcamUrl?: string | null;
@@ -127,6 +150,8 @@ interface FrameRenderConfig {
 	annotationRegions?: AnnotationRegion[];
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
+	keystrokes?: KeystrokeEvent[];
+	keystrokeSettings?: KeystrokeVisualSettings;
 	speedRegions?: SpeedRegion[];
 	previewWidth?: number;
 	previewHeight?: number;
@@ -149,10 +174,13 @@ interface FrameRenderConfig {
 	cursorClickEffectDurationMs?: number;
 	cursorClickBounce?: number;
 	cursorClickBounceDuration?: number;
+	cursorClickDepth?: number;
 	cursorSway?: number;
 	zoomSmoothness?: number;
 	zoomClassicMode?: boolean;
 	nativeReadbackMode?: "pixels" | "canvas";
+	transitionRegions?: TransitionRegion[];
+	memeRegions?: MemeRegion[];
 }
 
 interface AnimationState {
@@ -371,6 +399,7 @@ export class FrameRenderer {
 	private overlayContainer: Container | null = null;
 	private annotationContainer: Container | null = null;
 	private captionContainer: Container | null = null;
+	private keystrokeContainer: Container | null = null;
 	private webcamRootContainer: Container | null = null;
 	private webcamContainer: Container | null = null;
 	private videoSprite: Sprite | null = null;
@@ -416,8 +445,14 @@ export class FrameRenderer {
 	private captionSprite: Sprite | null = null;
 	private captionTextureSource: MutableVideoTextureSource | null = null;
 	private captionRenderKey: string | null = null;
+	private keystrokeCanvas: HTMLCanvasElement | null = null;
+	private keystrokeCtx: CanvasRenderingContext2D | null = null;
+	private keystrokeSprite: Sprite | null = null;
+	private keystrokeTextureSource: MutableVideoTextureSource | null = null;
+	private keystrokeRenderKey: string | null = null;
 	private exportCompositeCanvas: ExportCompositeCanvasState | null = null;
 	private outputCanvasOverride: HTMLCanvasElement | null = null;
+	private readonly overlayVideoPool = new OverlayVideoPool();
 	private config: FrameRenderConfig;
 	private animationState: AnimationState;
 	private motionBlurState: MotionBlurState;
@@ -511,6 +546,7 @@ export class FrameRenderer {
 		this.overlayContainer = new Container();
 		this.annotationContainer = new Container();
 		this.captionContainer = new Container();
+		this.keystrokeContainer = new Container();
 		this.webcamRootContainer = new Container();
 		this.webcamContainer = new Container();
 
@@ -543,6 +579,7 @@ export class FrameRenderer {
 		this.overlayContainer.addChild(this.webcamRootContainer);
 		this.cameraContainer.addChild(this.annotationContainer);
 		this.overlayContainer.addChild(this.captionContainer);
+		this.overlayContainer.addChild(this.keystrokeContainer);
 
 		this.videoMaskGraphics = new Graphics();
 		this.videoEffectsContainer.addChild(this.videoMaskGraphics);
@@ -579,6 +616,7 @@ export class FrameRenderer {
 				clickBounceDuration:
 					this.config.cursorClickBounceDuration ??
 					DEFAULT_CURSOR_CONFIG.clickBounceDuration,
+				clickDepth: this.config.cursorClickDepth ?? DEFAULT_CURSOR_CONFIG.clickDepth,
 				sway: this.config.cursorSway ?? DEFAULT_CURSOR_CONFIG.sway,
 			});
 			this.cursorContainer.addChild(this.cursorOverlay.container);
@@ -623,13 +661,17 @@ export class FrameRenderer {
 		};
 
 		const preferredRenderBackend = this.config.preferredRenderBackend;
+		const isLinux =
+			typeof navigator !== "undefined" &&
+			typeof navigator.userAgent === "string" &&
+			(navigator.userAgent.includes("Linux") || navigator.userAgent.includes("X11"));
 		const backendOrder: ExportRenderBackend[] =
-			preferredRenderBackend === "webgl"
-				? ["webgl", "webgpu"]
+			preferredRenderBackend === "webgl" || isLinux
+				? ["webgl"]
 				: preferredRenderBackend === "webgpu"
 					? ["webgpu", "webgl"]
 					: typeof navigator !== "undefined" && "gpu" in navigator
-						? ["webgpu", "webgl"]
+						? ["webgl", "webgpu"]
 						: ["webgl"];
 		const failures: PixiRendererAttempt[] = [];
 
@@ -1510,6 +1552,10 @@ export class FrameRenderer {
 		);
 
 		this.drawCaptionOverlay(context);
+		this.drawKeystrokeOverlay(context);
+		if (this.hasMediaOverlayRegions(timeMs, true)) {
+			await this.paintMediaOverlaysOnto(context, timeMs, true);
+		}
 		this.outputCanvasOverride = canvas;
 	}
 
@@ -1771,6 +1817,272 @@ export class FrameRenderer {
 		this.captionSprite.position.set(state.centerX, state.centerY + state.layout.translateY);
 		this.captionSprite.scale.set(state.layout.scale);
 		this.captionSprite.alpha = state.layout.opacity;
+	}
+
+	private ensureKeystrokeCanvas(width: number, height: number): void {
+		const targetWidth = Math.max(1, Math.ceil(width));
+		const targetHeight = Math.max(1, Math.ceil(height));
+
+		if (
+			this.keystrokeCanvas &&
+			this.keystrokeCanvas.width === targetWidth &&
+			this.keystrokeCanvas.height === targetHeight &&
+			this.keystrokeCtx &&
+			this.keystrokeSprite
+		) {
+			return;
+		}
+
+		this.keystrokeCanvas = document.createElement("canvas");
+		this.keystrokeCanvas.width = targetWidth;
+		this.keystrokeCanvas.height = targetHeight;
+		this.keystrokeCtx = configureHighQuality2DContext(this.keystrokeCanvas.getContext("2d"));
+
+		if (!this.keystrokeCtx) {
+			throw new Error("Failed to create keystroke export canvas");
+		}
+
+		const nextTexture = Texture.from(this.keystrokeCanvas);
+		if (this.keystrokeSprite) {
+			const previousTexture = this.keystrokeSprite.texture;
+			this.keystrokeSprite.texture = nextTexture;
+			this.keystrokeTextureSource = nextTexture.source as unknown as MutableVideoTextureSource;
+			previousTexture.destroy(true);
+		} else {
+			this.keystrokeSprite = new Sprite(nextTexture);
+			this.keystrokeSprite.anchor.set(0.5);
+			this.keystrokeContainer?.addChild(this.keystrokeSprite);
+			this.keystrokeTextureSource = nextTexture.source as unknown as MutableVideoTextureSource;
+		}
+	}
+
+	private rasterizeKeystrokeSprite(
+		activeEntries: ActiveKeystrokeEntry[],
+		settings: KeystrokeVisualSettings,
+	): { centerX: number; centerY: number } {
+		if (!this.captionMeasureCanvas) {
+			this.captionMeasureCanvas = document.createElement("canvas");
+			this.captionMeasureCanvas.width = 1;
+			this.captionMeasureCanvas.height = 1;
+			this.captionMeasureCtx = configureHighQuality2DContext(
+				this.captionMeasureCanvas.getContext("2d"),
+			);
+		}
+
+		const layout = buildMultiKeystrokeLayout(
+			this.captionMeasureCtx!,
+			activeEntries,
+			settings,
+			this.config.width,
+			this.config.height,
+		);
+
+		const { dims, resScale, pills, totalStackWidth, totalStackHeight } = layout;
+		const shadowPadding = Math.ceil(16 * resScale);
+		const canvasWidth = totalStackWidth + shadowPadding * 2;
+		const canvasHeight = totalStackHeight + shadowPadding * 2;
+
+		this.ensureKeystrokeCanvas(canvasWidth, canvasHeight);
+		if (!this.keystrokeCtx || !this.keystrokeCanvas || !this.keystrokeSprite) {
+			return { centerX: layout.centerX, centerY: layout.centerY };
+		}
+
+		const ctx = this.keystrokeCtx;
+		const theme = getKeystrokeTheme(settings.style);
+
+		ctx.clearRect(0, 0, this.keystrokeCanvas.width, this.keystrokeCanvas.height);
+
+		const pos = settings.position || "bottom-center";
+		const isLeftAligned = pos.includes("left");
+		const isRightAligned = pos.includes("right");
+
+		let curY = shadowPadding;
+
+		pills.forEach((pill, idx) => {
+			const activeEntry = activeEntries[idx];
+			const pillOpacity = activeEntry?.opacity ?? 1;
+			const pillScale = activeEntry?.scale ?? 1;
+
+			let pillX = shadowPadding + (totalStackWidth - pill.boxWidth) / 2;
+			if (isLeftAligned) {
+				pillX = shadowPadding;
+			} else if (isRightAligned) {
+				pillX = shadowPadding + totalStackWidth - pill.boxWidth;
+			}
+
+			ctx.save();
+			ctx.translate(pillX, curY);
+
+			if (pillScale !== 1) {
+				ctx.translate(pill.boxWidth / 2, pill.boxHeight / 2);
+				ctx.scale(pillScale, pillScale);
+				ctx.translate(-pill.boxWidth / 2, -pill.boxHeight / 2);
+			}
+			ctx.globalAlpha = pillOpacity;
+
+			// Container shadow
+			ctx.shadowColor = theme.containerShadow;
+			ctx.shadowBlur = 16 * resScale;
+			ctx.shadowOffsetY = 6 * resScale;
+
+			// Container background
+			ctx.fillStyle = theme.containerBg;
+			drawSquircleOnCanvas(ctx, {
+				x: 0,
+				y: 0,
+				width: pill.boxWidth,
+				height: pill.boxHeight,
+				radius: dims.containerRadius,
+			});
+			ctx.fill();
+
+			// Turn off shadow for borders and content
+			ctx.shadowColor = "transparent";
+			ctx.shadowBlur = 0;
+			ctx.shadowOffsetY = 0;
+
+			// Container border
+			ctx.lineWidth = Math.max(1, 1.5 * resScale);
+			ctx.strokeStyle = theme.containerBorder;
+			drawSquircleOnCanvas(ctx, {
+				x: 0,
+				y: 0,
+				width: pill.boxWidth,
+				height: pill.boxHeight,
+				radius: dims.containerRadius,
+			});
+			ctx.stroke();
+
+			// Draw keycaps and separators
+			let curKeyX = dims.containerPadX;
+			const keycapY = (pill.boxHeight - pill.keycapHeight) / 2;
+
+			pill.keycapMeasurements.forEach((k, kIdx) => {
+				if (kIdx > 0) {
+					const sepX = curKeyX + dims.gap;
+					ctx.font = `700 ${dims.sepFontSize}px system-ui, -apple-system, sans-serif`;
+					ctx.fillStyle = theme.sepColor;
+					ctx.textAlign = "center";
+					ctx.textBaseline = "middle";
+					ctx.fillText("+", sepX + pill.sepWidth / 2, pill.boxHeight / 2);
+					curKeyX += dims.gap + pill.sepWidth + dims.gap;
+				}
+
+				// Keycap background
+				ctx.fillStyle = theme.keycapBg;
+				drawSquircleOnCanvas(ctx, {
+					x: curKeyX,
+					y: keycapY,
+					width: k.width,
+					height: pill.keycapHeight,
+					radius: dims.keycapRadius,
+				});
+				ctx.fill();
+
+				// Keycap border
+				ctx.lineWidth = Math.max(1, 1 * resScale);
+				ctx.strokeStyle = theme.keycapBorder;
+				drawSquircleOnCanvas(ctx, {
+					x: curKeyX,
+					y: keycapY,
+					width: k.width,
+					height: pill.keycapHeight,
+					radius: dims.keycapRadius,
+				});
+				ctx.stroke();
+
+				// Keycap text
+				ctx.font = `600 ${dims.keycapFontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
+				ctx.fillStyle = theme.textColor;
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillText(k.key, curKeyX + k.width / 2, keycapY + pill.keycapHeight / 2);
+
+				curKeyX += k.width;
+			});
+
+			ctx.restore();
+
+			curY += pill.boxHeight + dims.stackGap;
+		});
+
+		this.keystrokeTextureSource?.update();
+		this.keystrokeRenderKey = layout.key;
+
+		return { centerX: layout.centerX, centerY: layout.centerY };
+	}
+
+	private updateKeystrokeLayer(timeMs: number): void {
+		const keystrokes = this.config.keystrokes;
+		const settings = this.config.keystrokeSettings;
+		const activeList = getActiveKeystrokeEvents(keystrokes, settings, timeMs);
+
+		if (activeList.length === 0 || !settings || !this.keystrokeContainer) {
+			if (this.keystrokeSprite) {
+				this.keystrokeSprite.visible = false;
+			}
+			if (this.keystrokeContainer) {
+				this.keystrokeContainer.visible = false;
+			}
+			this.keystrokeRenderKey = null;
+			return;
+		}
+
+		if (!this.captionMeasureCanvas) {
+			this.captionMeasureCanvas = document.createElement("canvas");
+			this.captionMeasureCanvas.width = 1;
+			this.captionMeasureCanvas.height = 1;
+			this.captionMeasureCtx = configureHighQuality2DContext(
+				this.captionMeasureCanvas.getContext("2d"),
+			);
+		}
+
+		const layout = buildMultiKeystrokeLayout(
+			this.captionMeasureCtx!,
+			activeList,
+			settings,
+			this.config.width,
+			this.config.height,
+		);
+
+		const needsReraster =
+			!this.keystrokeSprite ||
+			!this.keystrokeCanvas ||
+			this.keystrokeRenderKey !== layout.key;
+
+		if (needsReraster) {
+			this.rasterizeKeystrokeSprite(activeList, settings);
+		}
+
+		if (!this.keystrokeSprite) {
+			return;
+		}
+
+		this.keystrokeContainer.visible = true;
+		this.keystrokeSprite.visible = true;
+		this.keystrokeSprite.position.set(layout.centerX, layout.centerY);
+		this.keystrokeSprite.scale.set(1);
+		this.keystrokeSprite.alpha = 1;
+	}
+
+	private drawKeystrokeOverlay(context: CanvasRenderingContext2D): void {
+		if (
+			!this.keystrokeContainer?.visible ||
+			!this.keystrokeSprite?.visible ||
+			!this.keystrokeCanvas
+		) {
+			return;
+		}
+
+		const drawWidth = this.keystrokeCanvas.width * this.keystrokeSprite.scale.x;
+		const drawHeight = this.keystrokeCanvas.height * this.keystrokeSprite.scale.y;
+		const drawX = this.keystrokeSprite.x - drawWidth * this.keystrokeSprite.anchor.x;
+		const drawY = this.keystrokeSprite.y - drawHeight * this.keystrokeSprite.anchor.y;
+
+		context.save();
+		context.globalAlpha = this.keystrokeSprite.alpha;
+		context.drawImage(this.keystrokeCanvas, drawX, drawY, drawWidth, drawHeight);
+		context.restore();
 	}
 
 	private async syncBackgroundFrame(timeSeconds: number): Promise<void> {
@@ -2864,12 +3176,14 @@ export class FrameRenderer {
 			}
 			if (this.webcamRootContainer) this.webcamRootContainer.visible = false;
 			if (this.captionContainer) this.captionContainer.visible = false;
+			if (this.keystrokeContainer) this.keystrokeContainer.visible = false;
 			// Gap frames must bypass canvas annotation compositing as well as Pixi layers.
 			this.outputCanvasOverride = null;
 			this.app.render();
 			return;
 		}
 		if (this.captionContainer) this.captionContainer.visible = true;
+		if (this.keystrokeContainer) this.keystrokeContainer.visible = true;
 
 		const resolvedVideoSource = await this.resolveDetachedVideoFrameSource(
 			videoFrame,
@@ -2953,6 +3267,7 @@ export class FrameRenderer {
 
 		this.updateAnnotationLayer(timeMs);
 		this.updateCaptionLayer(timestamp / 1000);
+		this.updateKeystrokeLayer(cursorTimeMs);
 		this.updateWebcamOverlay();
 		await this.renderOutput(timeMs);
 	}
@@ -2961,12 +3276,16 @@ export class FrameRenderer {
 		if (this.hasActiveBlurAnnotations(timeMs)) {
 			const annotationContainerVisible = this.annotationContainer?.visible ?? true;
 			const captionContainerVisible = this.captionContainer?.visible ?? true;
+			const keystrokeContainerVisible = this.keystrokeContainer?.visible ?? true;
 
 			if (this.annotationContainer) {
 				this.annotationContainer.visible = false;
 			}
 			if (this.captionContainer) {
 				this.captionContainer.visible = false;
+			}
+			if (this.keystrokeContainer) {
+				this.keystrokeContainer.visible = false;
 			}
 
 			this.app!.render();
@@ -2977,6 +3296,9 @@ export class FrameRenderer {
 			if (this.captionContainer) {
 				this.captionContainer.visible = captionContainerVisible;
 			}
+			if (this.keystrokeContainer) {
+				this.keystrokeContainer.visible = keystrokeContainerVisible;
+			}
 
 			await this.composeBlurAnnotationFrame(timeMs);
 			return;
@@ -2984,6 +3306,66 @@ export class FrameRenderer {
 
 		this.outputCanvasOverride = null;
 		this.app!.render();
+
+		await this.composeMediaOverlayFrame(timeMs, { includeMemes: true });
+	}
+
+	/**
+	 * Composites meme + transition regions over whatever Pixi already drew.
+	 * Returns true when an overlay canvas override was installed.
+	 */
+	private async composeMediaOverlayFrame(
+		timeMs: number,
+		{ includeMemes }: { includeMemes: boolean },
+	): Promise<boolean> {
+		if (!this.app) {
+			return false;
+		}
+		if (!this.hasMediaOverlayRegions(timeMs, includeMemes)) {
+			return false;
+		}
+
+		const compositeState = this.ensureExportCompositeCanvas();
+		if (!compositeState) {
+			return false;
+		}
+
+		const { canvas, context } = compositeState;
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		context.drawImage(this.app.canvas as HTMLCanvasElement, 0, 0);
+		await this.paintMediaOverlaysOnto(context, timeMs, includeMemes);
+		this.outputCanvasOverride = canvas;
+		return true;
+	}
+
+	private hasMediaOverlayRegions(timeMs: number, includeMemes: boolean): boolean {
+		if (includeMemes && hasActiveMeme(this.config.memeRegions ?? [], timeMs)) return true;
+		return hasActiveTransition(this.config.transitionRegions ?? [], timeMs);
+	}
+
+	private async paintMediaOverlaysOnto(
+		context: CanvasRenderingContext2D,
+		timeMs: number,
+		includeMemes: boolean,
+	): Promise<void> {
+		if (includeMemes) {
+			await drawActiveMemes(
+				context,
+				this.config.memeRegions ?? [],
+				this.config.width,
+				this.config.height,
+				timeMs,
+				this.overlayVideoPool,
+			);
+		}
+		await drawActiveTransitions(
+			context,
+			this.config.transitionRegions ?? [],
+			this.config.width,
+			this.config.height,
+			timeMs,
+			this.overlayVideoPool,
+		);
 	}
 
 	private updateLayout(): void {
@@ -3095,6 +3477,7 @@ export class FrameRenderer {
 
 		const target = resolveSceneZoomTarget({
 			zoomRegions: this.config.zoomRegions,
+			zoomOutRegions: this.config.zoomOutRegions,
 			timeMs,
 			cursorTimeMs,
 			connectZooms: this.config.connectZooms,
@@ -3103,6 +3486,10 @@ export class FrameRenderer {
 			zoomClassicMode: this.config.zoomClassicMode,
 			cursorTelemetry: this.config.cursorTelemetry,
 			cursorFollowCamera: this.cursorFollowCamera,
+			aspectRatio: this.config.aspectRatio,
+			verticalTrackingMode: this.config.verticalTrackingMode,
+			stageSize: this.layoutCache.stageSize,
+			baseMask: this.layoutCache.maskRect,
 		});
 
 		const state = this.animationState;
@@ -3213,12 +3600,14 @@ export class FrameRenderer {
 	}
 
 	destroy(): void {
+		this.overlayVideoPool.destroyAll();
 		const texturesToDestroy = new Set<Texture>();
 		for (const sprite of [
 			this.videoSprite,
 			this.backgroundSprite,
 			this.webcamSprite,
 			this.captionSprite,
+			this.keystrokeSprite,
 			...this.videoShadowLayers.map((layer) => layer.sprite),
 			...this.webcamShadowLayers.map((layer) => layer.sprite),
 		]) {
@@ -3262,6 +3651,12 @@ export class FrameRenderer {
 		this.overlayContainer = null;
 		this.annotationContainer = null;
 		this.captionContainer = null;
+		this.keystrokeContainer = null;
+		this.keystrokeCanvas = null;
+		this.keystrokeCtx = null;
+		this.keystrokeSprite = null;
+		this.keystrokeTextureSource = null;
+		this.keystrokeRenderKey = null;
 		this.webcamRootContainer = null;
 		this.webcamContainer = null;
 		this.videoSprite = null;

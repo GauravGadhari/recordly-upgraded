@@ -2,17 +2,25 @@ import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import { BrowserWindow } from "electron";
-import { ensureNativeCursorMonitorBinary, getCursorMonitorExePath } from "../paths/binaries";
+import {
+	ensureNativeCursorMonitorBinary,
+	getCursorMonitorExePath,
+	getLinuxCursorMonitorBinaryPath,
+} from "../paths/binaries";
 import {
 	currentCursorVisualType,
+	isCursorCaptureActive,
 	nativeCursorMonitorOutputBuffer,
 	nativeCursorMonitorProcess,
 	setCurrentCursorVisualType,
+	setLinuxCursorScreenPoint,
 	setNativeCursorMonitorOutputBuffer,
 	setNativeCursorMonitorProcess,
 } from "../state";
 import type { CursorVisualType } from "../types";
 import { recordCursorMouseDown, recordCursorMouseUp } from "./interaction";
+import { recordKeyDown, recordKeyUp } from "./keystrokeTelemetry";
+import { isCursorCapturePaused, sampleCursorPoint } from "./telemetry";
 
 export function emitCursorStateChanged(cursorType: CursorVisualType) {
 	BrowserWindow.getAllWindows().forEach((window) => {
@@ -28,6 +36,18 @@ export function handleCursorMonitorStdout(chunk: Buffer) {
 	setNativeCursorMonitorOutputBuffer(lines.pop() ?? "");
 
 	for (const line of lines) {
+		const keyMatch = line.match(/^KEY:(down|up):(\d+)$/);
+		if (keyMatch) {
+			const isDown = keyMatch[1] === "down";
+			const code = Number(keyMatch[2]);
+			if (isDown) {
+				recordKeyDown(code, { source: "linux-evdev" });
+			} else {
+				recordKeyUp(code, true);
+			}
+			continue;
+		}
+
 		const interactionMatch = line.match(/^INTERACTION:(mousedown|mouseup)(?::([123]))?$/);
 		if (interactionMatch) {
 			if (interactionMatch[1] === "mouseup") {
@@ -35,6 +55,17 @@ export function handleCursorMonitorStdout(chunk: Buffer) {
 			} else {
 				const button = Number(interactionMatch[2]);
 				recordCursorMouseDown(button === 2 || button === 3 ? button : 1);
+			}
+			continue;
+		}
+
+		const posMatch = line.match(/^POSITION:(-?\d+(?:\.\d+)?):(-?\d+(?:\.\d+)?)$/);
+		if (posMatch) {
+			const x = Number.parseFloat(posMatch[1]);
+			const y = Number.parseFloat(posMatch[2]);
+			setLinuxCursorScreenPoint({ x, y, updatedAt: Date.now() });
+			if (isCursorCaptureActive && !isCursorCapturePaused()) {
+				sampleCursorPoint();
 			}
 			continue;
 		}
@@ -55,8 +86,10 @@ export function handleCursorMonitorStdout(chunk: Buffer) {
 		) {
 			if (currentCursorVisualType !== next) {
 				setCurrentCursorVisualType(next);
-				// sampleCursorStateChange is called from cursor/telemetry.ts via the handler
 				emitCursorStateChanged(next);
+				if (isCursorCaptureActive && !isCursorCapturePaused()) {
+					sampleCursorPoint();
+				}
 			}
 		}
 	}
@@ -85,15 +118,22 @@ export function stopNativeCursorMonitor() {
 }
 
 export async function startNativeCursorMonitor() {
+	if (nativeCursorMonitorProcess && !nativeCursorMonitorProcess.killed) {
+		return;
+	}
+
 	stopNativeCursorMonitor();
 
-	if (process.platform !== "darwin" && process.platform !== "win32") {
+	if (process.platform !== "darwin" && process.platform !== "win32" && process.platform !== "linux") {
 		setCurrentCursorVisualType("arrow");
 		return;
 	}
 
 	try {
 		let helperPath: string;
+		let spawnCmd = "";
+		let spawnArgs: string[] = [];
+
 		if (process.platform === "win32") {
 			helperPath = getCursorMonitorExePath();
 			try {
@@ -104,8 +144,26 @@ export async function startNativeCursorMonitor() {
 				setCurrentCursorVisualType("arrow");
 				return;
 			}
-		} else {
+			spawnCmd = helperPath;
+			spawnArgs = [];
+		} else if (process.platform === "darwin") {
 			helperPath = await ensureNativeCursorMonitorBinary();
+			spawnCmd = helperPath;
+			spawnArgs = [];
+		} else if (process.platform === "linux") {
+			helperPath = getLinuxCursorMonitorBinaryPath();
+			try {
+				await fs.access(helperPath, fsConstants.X_OK);
+			} catch {
+				console.warn("Linux cursor monitor helper missing or not executable:", helperPath);
+				setCurrentCursorVisualType("arrow");
+				return;
+			}
+			spawnCmd = helperPath;
+			spawnArgs = [];
+		} else {
+			setCurrentCursorVisualType("arrow");
+			return;
 		}
 
 		setNativeCursorMonitorOutputBuffer("");
@@ -113,7 +171,7 @@ export async function startNativeCursorMonitor() {
 
 		let proc: ReturnType<typeof spawn> | null;
 		try {
-			proc = spawn(helperPath, [], {
+			proc = spawn(spawnCmd, spawnArgs, {
 				stdio: ["pipe", "pipe", "pipe"],
 			});
 		} catch (spawnError) {

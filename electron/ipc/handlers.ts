@@ -3,6 +3,7 @@ import { registerAnnouncementHandlers } from "./register/announcements";
 import { registerAssetHandlers } from "./register/assets";
 import { registerCaptionHandlers } from "./register/captions";
 import { registerExportHandlers } from "./register/export";
+import { registerMediaLibraryHandlers } from "./register/mediaLibrary";
 import { registerPermissionHandlers } from "./register/permissions";
 import { registerProjectHandlers } from "./register/project";
 import { registerRecordingHandlers } from "./register/recording";
@@ -68,6 +69,7 @@ export function registerIpcHandlers(
 	registerAnnouncementHandlers();
 	registerAssetHandlers();
 	registerExportHandlers();
+	registerMediaLibraryHandlers();
 	registerCaptionHandlers();
 	registerProjectHandlers();
 	registerSettingsHandlers();

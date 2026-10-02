@@ -1187,8 +1187,25 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 		}
 
+		let useNativeLinuxCapture = false;
+		if (
+			platform === "linux" &&
+			typeof window.electronAPI.isNativeLinuxCaptureAvailable === "function"
+		) {
+			try {
+				const nativeLinuxResult =
+					await window.electronAPI.isNativeLinuxCaptureAvailable();
+				useNativeLinuxCapture = nativeLinuxResult.available;
+			} catch {
+				useNativeLinuxCapture = false;
+			}
+		}
+
 		let micLabel: string | undefined;
-		if ((useNativeMacScreenCapture || useNativeWindowsCapture) && microphoneEnabled) {
+		if (
+			(useNativeMacScreenCapture || useNativeWindowsCapture || useNativeLinuxCapture) &&
+			microphoneEnabled
+		) {
 			try {
 				const devices = await navigator.mediaDevices.enumerateDevices();
 				const mic = devices.find(
@@ -1205,6 +1222,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			selectedSource,
 			useNativeMacScreenCapture,
 			useNativeWindowsCapture,
+			useNativeLinuxCapture,
 			micLabel,
 		};
 	}, [
@@ -1688,25 +1706,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
-			const { selectedSource, useNativeMacScreenCapture, useNativeWindowsCapture, micLabel } =
-				preparedStart;
-			const useNativeCapture = useNativeMacScreenCapture || useNativeWindowsCapture;
+			const {
+				selectedSource,
+				useNativeMacScreenCapture,
+				useNativeWindowsCapture,
+				useNativeLinuxCapture,
+				micLabel,
+			} = preparedStart;
+			const useNativeCapture =
+				useNativeMacScreenCapture || useNativeWindowsCapture || useNativeLinuxCapture;
 			const shouldWarmStartNativeCapture = useNativeCapture && countdownDelay > 0;
-			if (countdownDelay > 0 && !shouldWarmStartNativeCapture) {
-				setCountdownActive(true);
-				try {
-					const result = await window.electronAPI.startCountdown(countdownDelay);
-					if (!result.success || result.cancelled || startWasCancelled()) {
-						cleanupCapturedMedia();
-						await stopWebcamRecorder();
-						return;
-					}
-				} finally {
-					setCountdownActive(false);
-				}
-				recordingSessionTimestamp.current = Date.now();
-				resetRecordingClock(recordingSessionTimestamp.current);
-			}
 
 			let nativeWindowsCaptureStartFailed = false;
 
@@ -1730,18 +1739,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					return;
 				}
 				if (!nativeResult.success) {
-					if (useNativeWindowsCapture) {
-						nativeWindowsCaptureStartFailed = true;
+					if (useNativeWindowsCapture || useNativeLinuxCapture) {
+						if (useNativeWindowsCapture) nativeWindowsCaptureStartFailed = true;
 						console.warn(
-							"Native Windows capture failed, falling back to browser capture:",
+							"Native screen capture failed, falling back to browser capture:",
 							nativeResult.error ?? nativeResult.message,
 						);
-						void logNativeCaptureDiagnostics("start-native-screen-recording");
-						if (!hasShownNativeWindowsFallbackToast.current) {
-							hasShownNativeWindowsFallbackToast.current = true;
-							toast.warning(
-								"Native Windows capture failed to start. Falling back to browser capture.",
-							);
+						if (useNativeWindowsCapture) {
+							void logNativeCaptureDiagnostics("start-native-screen-recording");
+							if (!hasShownNativeWindowsFallbackToast.current) {
+								hasShownNativeWindowsFallbackToast.current = true;
+								toast.warning(
+									"Native Windows capture failed to start. Falling back to browser capture.",
+								);
+							}
 						}
 					} else if (!nativeResult.userNotified) {
 						throw new Error(
@@ -1760,6 +1771,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (nativeResult.success) {
 					nativeScreenRecording.current = true;
 					nativeWindowsRecording.current = useNativeWindowsCapture;
+					// Since native capture (on Linux/macOS/Windows) captures screen without baked-in cursor,
+					// allow the editor to render the animated cursor overlay without double-cursor!
+					hideEditorOverlayCursorByDefault.current = false;
 					if (shouldWarmStartNativeCapture) {
 						nativeWarmStartActive.current = true;
 						const pauseResult = await window.electronAPI.pauseNativeScreenRecording();
@@ -1773,6 +1787,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 									"Failed to pause native capture before countdown",
 							);
 						}
+
+						void window.electronAPI?.warmupCursorMonitor?.();
 
 						setCountdownActive(true);
 						try {
@@ -1893,7 +1909,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 					setRecording(true);
 					try {
-						await window.electronAPI?.setRecordingState(true);
+						await window.electronAPI?.setRecordingState(true, {
+							startTimeMs: mainStartedAt,
+						});
 					} catch (stateError) {
 						console.warn(
 							"Failed to notify main process that native recording started:",
@@ -1903,22 +1921,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 					return;
 				}
-			}
-
-			if (nativeWindowsCaptureStartFailed && countdownDelay > 0) {
-				setCountdownActive(true);
-				try {
-					const result = await window.electronAPI.startCountdown(countdownDelay);
-					if (!result.success || result.cancelled) {
-						cleanupCapturedMedia();
-						await stopWebcamRecorder();
-						return;
-					}
-				} finally {
-					setCountdownActive(false);
-				}
-				recordingSessionTimestamp.current = Date.now();
-				resetRecordingClock(recordingSessionTimestamp.current);
 			}
 
 			const browserCursorPolicy = resolveBrowserCaptureCursorPolicy({
@@ -1956,7 +1958,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			let videoTrack: MediaStreamTrack | undefined;
 			let systemAudioIncluded = false;
 			const mediaDevices = navigator.mediaDevices as DesktopCaptureMediaDevices;
-			const useLinuxPortal = selectedSource.id === "screen:linux-portal";
+			const platform = await window.electronAPI.getPlatform();
+			const useLinuxPortal =
+				platform === "linux" || selectedSource.id === "screen:linux-portal";
 			const browserScreenVideoConstraints = {
 				mandatory: {
 					chromeMediaSource: CHROME_MEDIA_SOURCE,
@@ -2109,6 +2113,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				throw new Error("Media stream is not available.");
 			}
 
+			// Prioritize smooth high-framerate motion over static image detail
+			if ("contentHint" in videoTrack) {
+				videoTrack.contentHint = "motion";
+			}
+
 			try {
 				await videoTrack.applyConstraints({
 					frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
@@ -2241,6 +2250,45 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			recorder.onerror = () => {
 				setRecording(false);
 			};
+
+			// Warm up the cursor monitor right when countdown begins so tracking is active and calibrated:
+			void window.electronAPI?.warmupCursorMonitor?.();
+
+			if (countdownDelay > 0) {
+				setCountdownActive(true);
+				try {
+					const countdownResult =
+						await window.electronAPI.startCountdown(countdownDelay);
+					if (
+						!countdownResult.success ||
+						countdownResult.cancelled ||
+						startWasCancelled()
+					) {
+						cleanupCapturedMedia();
+						await stopWebcamRecorder();
+						try {
+							await window.electronAPI?.setRecordingState(false);
+						} catch {
+							// ignore
+						}
+						return;
+					}
+				} finally {
+					setCountdownActive(false);
+				}
+			}
+
+			if (startWasCancelled()) {
+				cleanupCapturedMedia();
+				await stopWebcamRecorder();
+				try {
+					await window.electronAPI?.setRecordingState(false);
+				} catch {
+					// ignore
+				}
+				return;
+			}
+
 			const mainStartedAt = Date.now();
 			beginWebcamCapture();
 			resetRecordingClock(mainStartedAt);
@@ -2249,7 +2297,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			recorder.start(RECORDER_TIMESLICE_MS);
 			setRecording(true);
 			try {
-				await window.electronAPI?.setRecordingState(true);
+				await window.electronAPI?.setRecordingState(true, {
+					startTimeMs: mainStartedAt,
+				});
 			} catch (stateError) {
 				console.warn("Failed to notify main process that recording started:", stateError);
 			}

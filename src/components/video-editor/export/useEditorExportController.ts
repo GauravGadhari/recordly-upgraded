@@ -4,7 +4,8 @@ import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import type { getSmokeExportConfig } from "../smokeExportConfig";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
-import type { CursorTelemetryPoint, SpeedRegion, ZoomRegion } from "../types";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
+import type { CursorTelemetryPoint, SpeedRegion, VerticalTrackingMode, ZoomRegion } from "../types";
 import type { VideoPlaybackRef } from "../VideoPlayback";
 import { useExportDialogActions } from "./useExportDialogActions";
 import type { useExportDimensions } from "./useExportDimensions";
@@ -41,6 +42,8 @@ type Input = {
 	captionSidecarPayload?: Parameters<typeof useExportRunner>[0]["captionSidecarPayload"];
 	experimentalNvidiaCudaExport: boolean;
 	nvidiaCudaExportAvailable: boolean;
+	aspectRatio?: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	remountPreview: () => void;
 };
 
@@ -59,6 +62,8 @@ export function useEditorExportController(input: Input) {
 		effectiveZoomRegions: input.effectiveZoomRegions,
 		effectiveCursorTelemetry: input.effectiveCursorTelemetry,
 		effectiveShowCursor: input.effectiveShowCursor,
+		aspectRatio: input.aspectRatio,
+		verticalTrackingMode: input.verticalTrackingMode,
 		ensureSupportedMp4SourceDimensions: input.dimensions.ensureSupportedMp4SourceDimensions,
 		captionSidecarPayload: input.captionSidecarPayload,
 		experimentalNvidiaCudaExport: input.experimentalNvidiaCudaExport,

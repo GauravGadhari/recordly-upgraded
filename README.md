@@ -11,14 +11,23 @@ Language: EN | [简中](README.zh-CN.md)
 
 ### Create polished demo videos in minutes
 [Recordly](https://www.recordly.dev) is your **open-source screen recorder** and editor for **walkthroughs, demos, product videos**, and more. 
-**Accepting PRs.**
-
-<img width="1280" height="720" alt="MP4 to GIF export (4)" src="https://github.com/user-attachments/assets/e6d68606-5fc0-4f70-99cd-7521982dc13b" />
-
 
 ---
-### Backed by the community
-<a href="https://coderabbit.link/recordly"><img width="400" alt="CodeRabbit Typemark" src="https://github.com/user-attachments/assets/3926ecfd-8652-4f2d-8da8-ac7641017cf5" /></a>
+
+### 🚀 What's New in Recordly Upgraded (v1.4.0)
+
+- ⚡ **60 FPS Buttery-Smooth Screen Recording**: High-framerate capture on Linux and Windows.
+- 💡 **Highlighting Area Panel**: Focus attention with lighted area shades, animated marching ants borders, neon glow auras, alert blinks, shimmer sweeps, and theater spotlight background dimming.
+- 📱 **Vertical & Landscape Orientations**: One-click switching for Reels, TikTok, Shorts (9:16) and widescreen (16:9).
+- 🔍 **Zoom Out Layer**: Dynamic camera pull-backs and wide-angle scene scaling.
+- 🔊 **Click SFX & Audio Engine**: Tactile click audio synced to mouse telemetry + procedural whoosh transitions.
+- ⌨️ **Keystroke Telemetry & Hotkey Overlay**: Visual shortcut display with customizable glass, neon, and minimal themes.
+
+#### 📥 Download Binaries
+Direct links to pre-built releases:
+- 🪟 **Windows Installer (.exe)**: [Recordly-windows-x64.exe](https://github.com/GauravGadhari/recordly-upgraded/releases/latest/download/Recordly-windows-x64.exe)
+- 📦 **Windows Portable (.zip)**: [Recordly-windows-x64-portable.zip](https://github.com/GauravGadhari/recordly-upgraded/releases/latest/download/Recordly-windows-x64-portable.zip)
+- 🐧 **Linux AppImage**: [Recordly-linux-x64.AppImage](https://github.com/GauravGadhari/recordly-upgraded/releases/latest/download/Recordly-linux-x64.AppImage)
 
 ---
 

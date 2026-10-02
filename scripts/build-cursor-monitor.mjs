@@ -25,8 +25,22 @@ const bundledDir = path.join(
 const bundledExePath = path.join(bundledDir, "cursor-monitor.exe");
 const helperId = "cursor-monitor";
 
+if (process.platform === "linux") {
+	console.log("[build-cursor-monitor] Building native Linux cursor monitor...");
+	mkdirSync(buildDir, { recursive: true });
+	execSync("cmake -B build -S .", { cwd: sourceDir, stdio: "inherit" });
+	execSync("cmake --build build", { cwd: sourceDir, stdio: "inherit" });
+	const binPath = path.join(buildDir, "cursor-monitor-linux");
+	const bundledLinuxDir = path.join(projectRoot, "electron", "native", "bin", "linux-x64");
+	const bundledLinuxPath = path.join(bundledLinuxDir, "cursor-monitor");
+	mkdirSync(bundledLinuxDir, { recursive: true });
+	copyFileSync(binPath, bundledLinuxPath);
+	console.log(`[build-cursor-monitor] Staged Linux cursor monitor: ${bundledLinuxPath}`);
+	process.exit(0);
+}
+
 if (process.platform !== "win32") {
-	console.log("[build-cursor-monitor] Skipping: host platform is not Windows.");
+	console.log("[build-cursor-monitor] Skipping: host platform is not Windows or Linux.");
 	process.exit(0);
 }
 

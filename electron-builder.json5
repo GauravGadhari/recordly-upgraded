@@ -41,6 +41,10 @@
     {
       "from": "public/wallpapers",
       "to": "assets/wallpapers"
+    },
+    {
+      "from": "public/sfx",
+      "to": "assets/sfx"
     }
   ],
   "publish": [

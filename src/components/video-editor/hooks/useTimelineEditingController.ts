@@ -18,8 +18,17 @@ import { useCursorTelemetry } from "./useCursorTelemetry";
 import { useEditorGlobalInteractions } from "./useEditorGlobalInteractions";
 import { useEditorPlaybackControls } from "./useEditorPlaybackControls";
 import { useFreshRecordingAutoZoom } from "./useFreshRecordingAutoZoom";
+import { useKeystrokeTelemetry } from "./useKeystrokeTelemetry";
+import { type AddMemeParams, useMemeRegionCommands } from "./useMemeRegionCommands";
 import { useTimelineProjection } from "./useTimelineProjection";
+import {
+	type AddTransitionParams,
+	useTransitionRegionCommands,
+} from "./useTransitionRegionCommands";
+import { useZoomOutRegionCommands } from "./useZoomOutRegionCommands";
 import { useZoomRegionCommands } from "./useZoomRegionCommands";
+
+const DEFAULT_SOUND_DURATION_MS = 3000;
 
 type Input = {
 	t: ReturnType<typeof useI18n>["t"];
@@ -42,6 +51,7 @@ type Input = {
 	videoPlaybackRef: RefObject<VideoPlaybackRef>;
 	timelineRef: RefObject<TimelineEditorHandle>;
 	nextZoomIdRef: MutableRefObject<number>;
+	nextZoomOutIdRef: MutableRefObject<number>;
 	nextClipIdRef: MutableRefObject<number>;
 	nextAudioIdRef: MutableRefObject<number>;
 	nextAnnotationIdRef: MutableRefObject<number>;
@@ -73,6 +83,11 @@ export function useTimelineEditingController(input: Input) {
 		timeline,
 		pendingFreshRecordingAutoZoomPathRef: input.pendingFreshRecordingAutoZoomPathRef,
 		autoSuggestedVideoPathRef: input.autoSuggestedVideoPathRef,
+	});
+	const keystrokes = useKeystrokeTelemetry({
+		videoPath: input.videoPath,
+		videoSourcePath: input.videoSourcePath,
+		timeline,
 	});
 	const projection = useTimelineProjection({
 		timeline,
@@ -128,28 +143,49 @@ export function useTimelineEditingController(input: Input) {
 		setZoomRegions: timeline.setZoomRegions,
 		selectedZoomId: timeline.selectedZoomId,
 		setSelectedZoomId: timeline.setSelectedZoomId,
+		setSelectedZoomOutId: timeline.setSelectedZoomOutId,
 		setSelectedAnnotationId: timeline.setSelectedAnnotationId,
 		setSelectedAudioId: timeline.setSelectedAudioId,
 		setSelectedCaptionId: timeline.setSelectedCaptionId,
+		setSelectedTransitionId: timeline.setSelectedTransitionId,
+		setSelectedMemeId: timeline.setSelectedMemeId,
 		setActiveEffectSection: input.setActiveEffectSection,
 		nextZoomIdRef: input.nextZoomIdRef,
 		autoSuggestedVideoPathRef: input.autoSuggestedVideoPathRef,
 		pendingFreshRecordingAutoZoomPathRef: input.pendingFreshRecordingAutoZoomPathRef,
+	});
+	const zoomOutCommands = useZoomOutRegionCommands({
+		setZoomOutRegions: timeline.setZoomOutRegions,
+		selectedZoomOutId: timeline.selectedZoomOutId,
+		setSelectedZoomOutId: timeline.setSelectedZoomOutId,
+		setSelectedZoomId: timeline.setSelectedZoomId,
+		setSelectedAnnotationId: timeline.setSelectedAnnotationId,
+		setSelectedAudioId: timeline.setSelectedAudioId,
+		setSelectedCaptionId: timeline.setSelectedCaptionId,
+		setSelectedTransitionId: timeline.setSelectedTransitionId,
+		setSelectedMemeId: timeline.setSelectedMemeId,
+		nextZoomOutIdRef: input.nextZoomOutIdRef,
 	});
 	const handleSelectAnnotation = useCallback(
 		(id: string | null) => {
 			timeline.setSelectedAnnotationId(id);
 			if (id) {
 				timeline.setSelectedZoomId(null);
+				timeline.setSelectedZoomOutId(null);
 				timeline.setSelectedAudioId(null);
 				timeline.setSelectedCaptionId(null);
+				timeline.setSelectedTransitionId(null);
+				timeline.setSelectedMemeId(null);
 			}
 		},
 		[
 			timeline.setSelectedAnnotationId,
 			timeline.setSelectedZoomId,
+			timeline.setSelectedZoomOutId,
 			timeline.setSelectedAudioId,
 			timeline.setSelectedCaptionId,
+			timeline.setSelectedTransitionId,
+			timeline.setSelectedMemeId,
 		],
 	);
 	const freshZoom = useFreshRecordingAutoZoom({
@@ -183,6 +219,8 @@ export function useTimelineEditingController(input: Input) {
 		setSelectedAnnotationId: timeline.setSelectedAnnotationId,
 		setSelectedAudioId: timeline.setSelectedAudioId,
 		setSelectedCaptionId: timeline.setSelectedCaptionId,
+		setSelectedTransitionId: timeline.setSelectedTransitionId,
+		setSelectedMemeId: timeline.setSelectedMemeId,
 		setActiveEffectSection: input.setActiveEffectSection,
 		nextClipIdRef: input.nextClipIdRef,
 		t: input.t,
@@ -194,8 +232,34 @@ export function useTimelineEditingController(input: Input) {
 		setSelectedZoomId: timeline.setSelectedZoomId,
 		setSelectedAnnotationId: timeline.setSelectedAnnotationId,
 		setSelectedCaptionId: timeline.setSelectedCaptionId,
+		setSelectedTransitionId: timeline.setSelectedTransitionId,
+		setSelectedMemeId: timeline.setSelectedMemeId,
 		setActiveEffectSection: input.setActiveEffectSection,
 		nextAudioIdRef: input.nextAudioIdRef,
+	});
+	const transitionCommands = useTransitionRegionCommands({
+		setTransitionRegions: timeline.setTransitionRegions,
+		selectedTransitionId: timeline.selectedTransitionId,
+		setSelectedTransitionId: timeline.setSelectedTransitionId,
+		setSelectedZoomId: timeline.setSelectedZoomId,
+		setSelectedClipId: timeline.setSelectedClipId,
+		setSelectedAnnotationId: timeline.setSelectedAnnotationId,
+		setSelectedAudioId: timeline.setSelectedAudioId,
+		setSelectedCaptionId: timeline.setSelectedCaptionId,
+		setSelectedMemeId: timeline.setSelectedMemeId,
+		setActiveEffectSection: input.setActiveEffectSection,
+	});
+	const memeCommands = useMemeRegionCommands({
+		setMemeRegions: timeline.setMemeRegions,
+		selectedMemeId: timeline.selectedMemeId,
+		setSelectedMemeId: timeline.setSelectedMemeId,
+		setSelectedZoomId: timeline.setSelectedZoomId,
+		setSelectedClipId: timeline.setSelectedClipId,
+		setSelectedAnnotationId: timeline.setSelectedAnnotationId,
+		setSelectedAudioId: timeline.setSelectedAudioId,
+		setSelectedCaptionId: timeline.setSelectedCaptionId,
+		setSelectedTransitionId: timeline.setSelectedTransitionId,
+		setActiveEffectSection: input.setActiveEffectSection,
 	});
 	const annotationCommands = useAnnotationRegionCommands({
 		setAnnotationRegions: timeline.setAnnotationRegions,
@@ -205,6 +269,88 @@ export function useTimelineEditingController(input: Input) {
 		nextAnnotationIdRef: input.nextAnnotationIdRef,
 		nextAnnotationZIndexRef: input.nextAnnotationZIndexRef,
 	});
+
+	const timelineTotalMs = Math.max(0, Math.round(projection.timelineDuration * 1000));
+	const timelinePlayheadMs = Math.round(projection.timelinePlayheadTime * 1000);
+
+	const handleAddTransitionAtPlayhead = useCallback(
+		(params: Omit<AddTransitionParams, "startMs" | "totalMs">) => {
+			if (!timelineTotalMs) return;
+			let startMs = timelinePlayheadMs;
+			const durationMs = params.durationMs ?? 1000;
+			// If playhead is near a clip split / boundary, center the transition over the cut
+			const cuts: number[] = [];
+			for (const clip of timeline.clipRegions) {
+				cuts.push(clip.startMs, clip.endMs);
+			}
+			const nearestCut = cuts.find(
+				(cut) => cut > 0 && cut < timelineTotalMs && Math.abs(cut - timelinePlayheadMs) <= Math.max(1500, durationMs),
+			);
+			if (nearestCut !== undefined) {
+				startMs = Math.max(0, Math.round(nearestCut - durationMs / 2));
+			}
+
+			transitionCommands.handleAddTransition({
+				...params,
+				startMs,
+				totalMs: timelineTotalMs,
+			});
+		},
+		[timelineTotalMs, timelinePlayheadMs, transitionCommands, timeline.clipRegions],
+	);
+
+	const handleAddMemeAtPlayhead = useCallback(
+		(params: Omit<AddMemeParams, "startMs" | "totalMs">) => {
+			if (!timelineTotalMs) return;
+			memeCommands.handleAddMeme({
+				...params,
+				startMs: timelinePlayheadMs,
+				totalMs: timelineTotalMs,
+			});
+		},
+		[timelineTotalMs, timelinePlayheadMs, memeCommands],
+	);
+
+	const handleAddSound = useCallback(
+		(sound: {
+			filePath: string;
+			name?: string;
+			category?: string;
+			durationMs?: number;
+		}) => {
+			if (!timelineTotalMs) return;
+			const durationMs = Math.max(1, Math.round(sound.durationMs ?? DEFAULT_SOUND_DURATION_MS));
+			const start = Math.max(0, Math.min(timelinePlayheadMs, timelineTotalMs - 1));
+			const end = Math.min(start + durationMs, timelineTotalMs);
+			if (end <= start) return;
+
+			// Place the sound on the first audio track that is free for this span.
+			let trackIndex = 0;
+			while (
+				timeline.audioRegions.some(
+					(region) =>
+						(region.trackIndex ?? 0) === trackIndex &&
+						region.startMs < end &&
+						region.endMs > start,
+				)
+			) {
+				trackIndex += 1;
+			}
+
+			audioCommands.handleAudioAdded(
+				{ start, end },
+				sound.filePath,
+				trackIndex,
+				{ label: sound.name, category: sound.category },
+			);
+		},
+		[
+			audioCommands,
+			timeline.audioRegions,
+			timelineTotalMs,
+			timelinePlayheadMs,
+		],
+	);
 
 	useEditorGlobalInteractions({
 		timeline,
@@ -223,10 +369,17 @@ export function useTimelineEditingController(input: Input) {
 		playback,
 		captionCommands,
 		zoomCommands,
+		zoomOutCommands,
 		clipCommands,
 		audioCommands,
+		transitionCommands,
+		memeCommands,
 		annotationCommands,
+		keystrokes,
 		handleSelectAnnotation,
+		handleAddSound,
+		handleAddTransitionAtPlayhead,
+		handleAddMemeAtPlayhead,
 		handleAutoSuggestZoomsConsumed: freshZoom.handleAutoSuggestZoomsConsumed,
 	};
 }

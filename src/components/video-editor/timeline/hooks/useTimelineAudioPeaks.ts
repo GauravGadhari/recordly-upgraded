@@ -89,8 +89,8 @@ export function useTimelineAudioPeaks(
 					setLoading(false);
 				}
 				return;
-			} catch {
-				// fallthrough
+			} catch (err) {
+				console.warn("[useTimelineAudioPeaks] Failed to generate peaks for:", mediaResource, err);
 			}
 
 			if (!enableSourceSidecarFallback && fallbackResources.length === 0) {

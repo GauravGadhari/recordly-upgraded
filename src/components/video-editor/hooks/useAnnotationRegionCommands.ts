@@ -2,11 +2,14 @@ import type { Span } from "dnd-timeline";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import {
 	type AnnotationRegion,
+	type AnnotationType,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
 	DEFAULT_FIGURE_DATA,
+	DEFAULT_HIGHLIGHT_DATA,
 	type FigureData,
+	type HighlightData,
 } from "../types";
 
 interface UseAnnotationRegionCommandsParams {
@@ -27,19 +30,22 @@ export function useAnnotationRegionCommands({
 	nextAnnotationZIndexRef,
 }: UseAnnotationRegionCommandsParams) {
 	const handleAnnotationAdded = useCallback(
-		(span: Span, trackIndex = 0) => {
+		(span: Span, trackIndex = 0, initialType: AnnotationType = "text") => {
 			const id = `annotation-${nextAnnotationIdRef.current++}`;
 			const newRegion: AnnotationRegion = {
 				id,
 				startMs: Math.round(span.start),
 				endMs: Math.round(span.end),
-				type: "text",
-				content: "Enter text...",
+				type: initialType,
+				content: initialType === "highlight" ? "" : "Enter text...",
 				position: { ...DEFAULT_ANNOTATION_POSITION },
 				size: { ...DEFAULT_ANNOTATION_SIZE },
 				style: { ...DEFAULT_ANNOTATION_STYLE },
 				zIndex: nextAnnotationZIndexRef.current++,
 				trackIndex,
+				...(initialType === "highlight"
+					? { highlightData: { ...DEFAULT_HIGHLIGHT_DATA } }
+					: {}),
 			};
 			setAnnotationRegions((current) => [...current, newRegion]);
 			setSelectedAnnotationId(id);
@@ -115,6 +121,9 @@ export function useAnnotationRegionCommands({
 					} else if (type === "blur") {
 						updated.content = "";
 						if (region.blurIntensity === undefined) updated.blurIntensity = 20;
+					} else if (type === "highlight") {
+						updated.content = "";
+						if (!region.highlightData) updated.highlightData = { ...DEFAULT_HIGHLIGHT_DATA };
 					}
 					return updated;
 				}),
@@ -154,6 +163,10 @@ export function useAnnotationRegionCommands({
 		(id: string, blurColor: string) => updateRegion(id, { blurColor }),
 		[updateRegion],
 	);
+	const handleAnnotationHighlightDataChange = useCallback(
+		(id: string, highlightData: HighlightData) => updateRegion(id, { highlightData }),
+		[updateRegion],
+	);
 	const handleAnnotationPositionChange = useCallback(
 		(id: string, position: { x: number; y: number }) => updateRegion(id, { position }),
 		[updateRegion],
@@ -173,6 +186,7 @@ export function useAnnotationRegionCommands({
 		handleAnnotationFigureDataChange,
 		handleAnnotationBlurIntensityChange,
 		handleAnnotationBlurColorChange,
+		handleAnnotationHighlightDataChange,
 		handleAnnotationPositionChange,
 		handleAnnotationSizeChange,
 	};

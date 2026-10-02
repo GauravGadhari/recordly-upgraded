@@ -1,9 +1,10 @@
+import { getAssetPath } from "@/lib/assetPath";
 import { fromFileUrl, toFileUrl } from "@/components/video-editor/projectPersistence";
 
 const NOOP = () => undefined;
 const REMOTE_MEDIA_URL_PATTERN = /^(https?:|blob:|data:)/i;
 const LOOPBACK_MEDIA_HOSTS = new Set(["127.0.0.1", "localhost"]);
-const BUNDLED_ASSET_PATH_PREFIXES = ["/wallpapers/", "/app-icons/"];
+const BUNDLED_ASSET_PATH_PREFIXES = ["/wallpapers/", "/app-icons/", "/sfx/"];
 
 export function isAbsoluteLocalPath(resource: string) {
 	return (
@@ -13,7 +14,7 @@ export function isAbsoluteLocalPath(resource: string) {
 	);
 }
 
-function isBundledAssetPath(resource: string) {
+export function isBundledAssetPath(resource: string) {
 	return BUNDLED_ASSET_PATH_PREFIXES.some((prefix) => resource.startsWith(prefix));
 }
 
@@ -93,6 +94,14 @@ function inferMimeType(filePath: string) {
 }
 
 export async function resolveMediaResourceUrl(resource: string): Promise<string> {
+	if (!resource) {
+		return resource;
+	}
+
+	if (isBundledAssetPath(resource)) {
+		return getAssetPath(resource.replace(/^\/+/, ""));
+	}
+
 	const localFilePath = getLocalFilePath(resource);
 	if (!localFilePath) {
 		return resource;
@@ -114,6 +123,60 @@ export async function resolveMediaResourceUrl(resource: string): Promise<string>
 	}
 
 	return /^file:\/\//i.test(resource) ? resource : toFileUrl(localFilePath);
+}
+
+export async function loadMediaArrayBuffer(resource: string): Promise<ArrayBuffer> {
+	if (!resource) {
+		throw new Error("Empty media resource");
+	}
+
+	// 1. Direct base64 data URL decode — bypasses network stack, instant, never throws network errors
+	if (resource.startsWith("data:")) {
+		const commaIndex = resource.indexOf(",");
+		if (commaIndex === -1) {
+			throw new Error("Invalid data URL");
+		}
+		const base64 = resource.slice(commaIndex + 1);
+		const binary = atob(base64);
+		const len = binary.length;
+		const bytes = new Uint8Array(len);
+		for (let i = 0; i < len; i++) {
+			bytes[i] = binary.charCodeAt(i);
+		}
+		return bytes.buffer;
+	}
+
+	// 2. Resolve URL (including bundled asset paths like /sfx/...)
+	const resolvedUrl = await resolveMediaResourceUrl(resource);
+
+	// 3. For local or file URLs in Electron, prefer reading directly via IPC if available
+	const localPath =
+		(/^file:\/\//i.test(resolvedUrl) ? fromFileUrl(resolvedUrl) : null) ||
+		getLocalFilePath(resolvedUrl) ||
+		getLocalFilePath(resource) ||
+		(/^file:\/\//i.test(resource) ? fromFileUrl(resource) : null);
+
+	if (localPath && typeof window !== "undefined" && window.electronAPI?.readLocalFile) {
+		try {
+			const result = await window.electronAPI.readLocalFile(localPath);
+			if (result.success && result.data) {
+				const bytes =
+					result.data instanceof Uint8Array ? result.data : new Uint8Array(result.data);
+				const copy = new Uint8Array(bytes.byteLength);
+				copy.set(bytes);
+				return copy.buffer;
+			}
+		} catch (err) {
+			console.warn("[MediaSource] readLocalFile failed, falling back to fetch:", err);
+		}
+	}
+
+	// 4. Fetch fallback
+	const response = await fetch(resolvedUrl);
+	if (!response.ok) {
+		throw new Error(`Failed to load media: ${response.status} ${response.statusText}`);
+	}
+	return await response.arrayBuffer();
 }
 
 async function createReadableMediaResourceFile(resource: string): Promise<File> {

@@ -109,6 +109,28 @@ describe("timeline model", () => {
 		expect(getAnnotationLabel({ ...BASE_ANNOTATION, type: "figure", content: "x" })).toBe(
 			"Annotation",
 		);
+		expect(getAnnotationLabel({ ...BASE_ANNOTATION, type: "highlight", content: "" })).toBe(
+			"Highlight",
+		);
+		expect(
+			getAnnotationLabel({
+				...BASE_ANNOTATION,
+				type: "highlight",
+				content: "",
+				highlightData: {
+					color: "#FACC15",
+					fillOpacity: 0.2,
+					borderColor: "#FACC15",
+					borderWidth: 2,
+					borderRadius: 8,
+					borderStyle: "solid",
+					animation: "border-line",
+					animationSpeed: 1,
+					glowIntensity: 0.6,
+					spotlightDim: 0,
+				},
+			}),
+		).toBe("Highlight (border-line)");
 
 		expect(
 			getAudioLabel({
@@ -122,6 +144,25 @@ describe("timeline model", () => {
 		expect(getAudioLabel({ id: "2", startMs: 0, endMs: 1, audioPath: "", volume: 1 })).toBe(
 			"Audio",
 		);
+		expect(
+			getAudioLabel({
+				id: "3",
+				startMs: 0,
+				endMs: 1,
+				audioPath: "data:audio/wav;base64,UklGRm...AAAA/AAAA=",
+				volume: 1,
+				label: "Click",
+			}),
+		).toBe("Click");
+		expect(
+			getAudioLabel({
+				id: "4",
+				startMs: 0,
+				endMs: 1,
+				audioPath: "data:audio/wav;base64,UklGRm...AAAA/AAAA=",
+				volume: 1,
+			}),
+		).toBe("Audio");
 	});
 
 	it("builds row spans for dnd constraints", () => {

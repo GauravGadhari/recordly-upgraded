@@ -268,3 +268,90 @@
 		transform: translateX(270%);
 	}
 }
+
+@keyframes fadeBlackPreview {
+	0%, 100% { opacity: 0; }
+	50% { opacity: 0.96; }
+}
+
+@keyframes dipWhitePreview {
+	0%, 100% { opacity: 0; }
+	50% { opacity: 0.96; }
+}
+
+@keyframes crossDissolvePreview {
+	0%, 100% { opacity: 0; }
+	50% { opacity: 0.85; }
+}
+
+@keyframes zoomInPreview {
+	0%, 100% { transform: scale(1); }
+	50% { transform: scale(1.45); }
+}
+
+@keyframes zoomOutPreview {
+	0%, 100% { transform: scale(1.45); }
+	50% { transform: scale(1); }
+}
+
+@keyframes slideLeftPreview {
+	0% { transform: translateX(100%); }
+	50% { transform: translateX(0%); }
+	100% { transform: translateX(-100%); }
+}
+
+@keyframes slideRightPreview {
+	0% { transform: translateX(-100%); }
+	50% { transform: translateX(0%); }
+	100% { transform: translateX(100%); }
+}
+
+@keyframes glitchPreview {
+	0%, 100% { opacity: 0; transform: translate(0, 0); }
+	20% { opacity: 0.8; transform: translate(-2px, 1px); }
+	40% { opacity: 0.9; transform: translate(2px, -1px); }
+	60% { opacity: 0.7; transform: translate(-1px, -1px); }
+	80% { opacity: 0; }
+}
+
+/* Highlighting Area Animations */
+@keyframes recordly-dash-march {
+	to {
+		stroke-dashoffset: -36;
+	}
+}
+
+.recordly-highlight-marching-dash {
+	animation: recordly-dash-march 1.2s linear infinite;
+}
+
+@keyframes recordly-highlight-pulse {
+	0%, 100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.3;
+		transform: scale(0.995);
+	}
+}
+
+@keyframes recordly-highlight-glow {
+	0%, 100% {
+		filter: drop-shadow(0 0 6px var(--highlight-glow-color, rgba(250, 204, 21, 0.6))) brightness(1.05);
+	}
+	50% {
+		filter: drop-shadow(0 0 22px var(--highlight-glow-color, rgba(250, 204, 21, 0.95))) brightness(1.25);
+	}
+}
+
+@keyframes recordly-highlight-shimmer {
+	0% {
+		transform: translateX(-150%) skewX(-20deg);
+	}
+	100% {
+		transform: translateX(250%) skewX(-20deg);
+	}
+}
+
+

@@ -15,9 +15,12 @@ interface UseZoomRegionCommandsParams {
 	setZoomRegions: Dispatch<SetStateAction<ZoomRegion[]>>;
 	selectedZoomId: string | null;
 	setSelectedZoomId: Dispatch<SetStateAction<string | null>>;
+	setSelectedZoomOutId?: Dispatch<SetStateAction<string | null>>;
 	setSelectedAnnotationId: Dispatch<SetStateAction<string | null>>;
 	setSelectedAudioId: Dispatch<SetStateAction<string | null>>;
 	setSelectedCaptionId: Dispatch<SetStateAction<string | null>>;
+	setSelectedTransitionId?: Dispatch<SetStateAction<string | null>>;
+	setSelectedMemeId?: Dispatch<SetStateAction<string | null>>;
 	setActiveEffectSection: Dispatch<SetStateAction<EditorEffectSection>>;
 	nextZoomIdRef: MutableRefObject<number>;
 	autoSuggestedVideoPathRef: MutableRefObject<string | null>;
@@ -29,9 +32,12 @@ export function useZoomRegionCommands({
 	setZoomRegions,
 	selectedZoomId,
 	setSelectedZoomId,
+	setSelectedZoomOutId,
 	setSelectedAnnotationId,
 	setSelectedAudioId,
 	setSelectedCaptionId,
+	setSelectedTransitionId,
+	setSelectedMemeId,
 	setActiveEffectSection,
 	nextZoomIdRef,
 	autoSuggestedVideoPathRef,
@@ -42,9 +48,12 @@ export function useZoomRegionCommands({
 			setSelectedZoomId(id);
 			if (id) {
 				setActiveEffectSection("zoom");
+				setSelectedZoomOutId?.(null);
 				setSelectedAnnotationId(null);
 				setSelectedAudioId(null);
 				setSelectedCaptionId(null);
+				setSelectedTransitionId?.(null);
+				setSelectedMemeId?.(null);
 			} else {
 				setActiveEffectSection((section) => (section === "zoom" ? "scene" : section));
 			}
@@ -54,7 +63,10 @@ export function useZoomRegionCommands({
 			setSelectedAnnotationId,
 			setSelectedAudioId,
 			setSelectedCaptionId,
+			setSelectedTransitionId,
+			setSelectedMemeId,
 			setSelectedZoomId,
+			setSelectedZoomOutId,
 		],
 	);
 

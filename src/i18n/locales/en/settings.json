@@ -124,11 +124,16 @@
 			"echo": {
 				"label": "Echo",
 				"description": "A pair of soft rings that spread outward with a cleaner pulse."
+			},
+			"depth": {
+				"label": "Depth",
+				"description": "A tactile press that makes the cursor feel physically pushed into the surface."
 			}
 		},
 		"cursorMotionBlur": "Cursor Motion Blur",
 		"cursorClickBounce": "Cursor Click Bounce",
 		"cursorClickBounceDuration": "Bounce Speed",
+		"cursorClickDepth": "Click Depth",
 		"cursorSway": "Cursor Sway",
 		"webcam": "Webcam Overlay",
 		"webcamFootage": "Webcam Footage",

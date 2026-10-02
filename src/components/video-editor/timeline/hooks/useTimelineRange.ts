@@ -12,6 +12,7 @@ export interface TimelineWheelPanDeltaInput {
 	deltaY: number;
 	deltaMode: number;
 	shiftKey?: boolean;
+	altKey?: boolean;
 	ctrlKey?: boolean;
 	metaKey?: boolean;
 	canScrollVertically?: boolean;
@@ -22,6 +23,7 @@ export function resolveTimelineWheelPanDeltaPx({
 	deltaY,
 	deltaMode,
 	shiftKey = false,
+	altKey = false,
 	ctrlKey = false,
 	metaKey = false,
 	canScrollVertically = true,
@@ -34,7 +36,7 @@ export function resolveTimelineWheelPanDeltaPx({
 		return normalizeWheelDeltaToPixels(deltaX, deltaMode);
 	}
 
-	if ((shiftKey || !canScrollVertically) && Math.abs(deltaY) > 0) {
+	if ((shiftKey || altKey || !canScrollVertically) && Math.abs(deltaY) > 0) {
 		return normalizeWheelDeltaToPixels(deltaY, deltaMode);
 	}
 
@@ -86,6 +88,7 @@ export function useTimelineRange({ totalMs, timelineContainerRef }: UseTimelineR
 				deltaY: event.deltaY,
 				deltaMode: event.deltaMode,
 				shiftKey: event.shiftKey,
+				altKey: event.altKey,
 				ctrlKey: event.ctrlKey,
 				metaKey: event.metaKey,
 				canScrollVertically: container

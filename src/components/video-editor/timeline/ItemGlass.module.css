@@ -174,6 +174,50 @@
 	z-index: 10;
 }
 
+.glassViolet {
+	position: relative;
+	border-radius: 8px;
+	background: #4c1d95;
+	border: 1px solid #6d28d9;
+	transition:
+		background 0.15s ease,
+		border-color 0.15s ease;
+}
+
+.glassViolet:hover {
+	background: #5b21b6;
+	border-color: #7c3aed;
+}
+
+.glassViolet.selected {
+	background: #6d28d9;
+	border-color: #a855f7;
+	box-shadow: inset 0 0 0 1.5px #a855f7;
+	z-index: 10;
+}
+
+.glassEmerald {
+	position: relative;
+	border-radius: 8px;
+	background: #064e3b;
+	border: 1px solid #047857;
+	transition:
+		background 0.15s ease,
+		border-color 0.15s ease;
+}
+
+.glassEmerald:hover {
+	background: #065f46;
+	border-color: #059669;
+}
+
+.glassEmerald.selected {
+	background: #047857;
+	border-color: #10b981;
+	box-shadow: inset 0 0 0 1.5px #10b981;
+	z-index: 10;
+}
+
 /* Pill resize handle — visible on hover */
 .zoomEndCap {
 	position: absolute;
@@ -308,15 +352,67 @@
 	box-shadow: inset 0 0 0 1.5px #ec4899;
 }
 
-:global(:root:not(.dark)) .zoomEndCap {
-	background: rgba(0, 0, 0, 0.5);
-}
-:global(:root:not(.dark)) .zoomEndCap:hover {
-	background: rgba(0, 0, 0, 0.7);
+/* Sleek modern edge trim handle — visible on hover/selection */
+.zoomEndCap {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 8px;
+	pointer-events: auto;
+	z-index: 15;
+	opacity: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	transition:
+		opacity 0.15s ease,
+		background 0.15s ease;
 }
 
-.zoomEndCap:hover {
-	background: rgba(255, 255, 255, 1);
+.zoomEndCap::after {
+	content: "";
+	display: block;
+	width: 3px;
+	height: 60%;
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.75);
+	box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+	transition:
+		background 0.15s ease,
+		height 0.15s ease,
+		width 0.15s ease;
+}
+
+:global(:root:not(.dark)) .zoomEndCap::after {
+	background: rgba(0, 0, 0, 0.55);
+	box-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+.zoomEndCap:hover::after {
+	background: #ffffff;
+	height: 85%;
+	width: 4px;
+	box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+}
+
+:global(:root:not(.dark)) .zoomEndCap:hover::after {
+	background: #000000;
+	box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+}
+
+.zoomEndCap.left {
+	left: 0px;
+	cursor: col-resize;
+	border-top-left-radius: inherit;
+	border-bottom-left-radius: inherit;
+}
+
+.zoomEndCap.right {
+	right: 0px;
+	cursor: col-resize;
+	border-top-right-radius: inherit;
+	border-bottom-right-radius: inherit;
 }
 
 .glassGreen:hover .zoomEndCap,
@@ -326,22 +422,18 @@
 .glassPurple:hover .zoomEndCap,
 .glassCyan:hover .zoomEndCap,
 .glassDarkGreen:hover .zoomEndCap,
-.glassCaption:hover .zoomEndCap {
+.glassCaption:hover .zoomEndCap,
+.glassViolet:hover .zoomEndCap,
+.glassEmerald:hover .zoomEndCap,
+.glassGreen.selected .zoomEndCap,
+.glassRed.selected .zoomEndCap,
+.glassYellow.selected .zoomEndCap,
+.glassAmber.selected .zoomEndCap,
+.glassPurple.selected .zoomEndCap,
+.glassCyan.selected .zoomEndCap,
+.glassDarkGreen.selected .zoomEndCap,
+.glassCaption.selected .zoomEndCap,
+.glassViolet.selected .zoomEndCap,
+.glassEmerald.selected .zoomEndCap {
 	opacity: 1;
-}
-
-.zoomEndCap.left {
-	left: 6px;
-	cursor: col-resize;
-}
-
-.zoomEndCap.right {
-	right: 6px;
-	cursor: col-resize;
-}
-
-/* Grip lines removed */
-.zoomEndCap::before,
-.zoomEndCap::after {
-	content: none;
 }

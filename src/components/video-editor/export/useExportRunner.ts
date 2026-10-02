@@ -44,6 +44,8 @@ export function useExportRunner(input: ExportRunnerInput) {
 				captionSidecarPayload,
 				experimentalNvidiaCudaExport,
 				nvidiaCudaExportAvailable,
+				aspectRatio,
+				verticalTrackingMode,
 				remountPreview,
 			} = inputRef.current;
 			const { shadowIntensity, padding } = appearance;
@@ -145,6 +147,8 @@ export function useExportRunner(input: ExportRunnerInput) {
 							previewWidth,
 							previewHeight,
 							shadowIntensity: effectiveShadowIntensity,
+							aspectRatio,
+							verticalTrackingMode,
 							onProgress: (progress) => {
 								if (exportWasCancelled()) return;
 								recordSmokeProgress(progress);
@@ -291,6 +295,8 @@ export function useExportRunner(input: ExportRunnerInput) {
 							previewWidth,
 							previewHeight,
 							shadowIntensity: effectiveShadowIntensity,
+							aspectRatio,
+							verticalTrackingMode,
 							onProgress: (progress) => {
 								if (exportWasCancelled()) return;
 								recordSmokeProgress(progress);

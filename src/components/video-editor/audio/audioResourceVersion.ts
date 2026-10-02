@@ -1,6 +1,7 @@
 export function getAudioResourceVersionKey(resource: string, version = 0): string {
 	const safeVersion = Number.isFinite(version) ? Math.max(0, Math.trunc(version)) : 0;
-	return `${resource}::recordly-audio-v${safeVersion}`;
+	const scope = resource.startsWith("data:") ? getAudioResourceCacheScope(resource) : resource;
+	return `${scope}::recordly-audio-v${safeVersion}`;
 }
 
 function parseLoopbackMediaServerUrl(resourceUrl: string): URL | null {
@@ -17,6 +18,10 @@ function parseLoopbackMediaServerUrl(resourceUrl: string): URL | null {
 }
 
 export function getAudioResourceCacheScope(resourceUrl: string): string {
+	if (resourceUrl.startsWith("data:")) {
+		return `data-url::len=${resourceUrl.length}::head=${resourceUrl.slice(0, 48)}::tail=${resourceUrl.slice(-48)}`;
+	}
+
 	const url = parseLoopbackMediaServerUrl(resourceUrl);
 	if (!url) {
 		return resourceUrl;

@@ -8,18 +8,26 @@ import type {
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { fromFileUrl } from "../projectPersistence";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import type {
 	AnnotationRegion,
+	AnnotationType,
 	AudioRegion,
 	CaptionCue,
 	ClipRegion,
 	CursorTelemetryPoint,
+	KeystrokeEvent,
+	MemeRegion,
 	SpeedRegion,
+	TransitionRegion,
+	TransitionType,
 	TrimRegion,
 	ZoomFocus,
+	ZoomOutRegion,
 	ZoomRegion,
 } from "../types";
 import KeyframeMarkers from "./components/markers/KeyframeMarkers";
+import TimelineScrollbar from "./components/scrollbar/TimelineScrollbar";
 import TimelineCanvas from "./components/viewport/TimelineCanvas";
 import TimelineWrapper from "./components/wrapper/TimelineWrapper";
 import { calculateTimelineScale } from "./core/time";
@@ -47,6 +55,12 @@ export interface TimelineEditorProps {
 	onZoomDelete: (id: string) => void;
 	selectedZoomId: string | null;
 	onSelectZoom: (id: string | null) => void;
+	zoomOutRegions?: ZoomOutRegion[];
+	onZoomOutAdded?: (span: Span) => void;
+	onZoomOutSpanChange?: (id: string, span: Span) => void;
+	onZoomOutDelete?: (id: string) => void;
+	selectedZoomOutId?: string | null;
+	onSelectZoomOut?: (id: string | null) => void;
 	trimRegions?: TrimRegion[];
 	onTrimSpanChange?: (id: string, span: Span) => void;
 	clipRegions?: ClipRegion[];
@@ -56,7 +70,7 @@ export interface TimelineEditorProps {
 	selectedClipId?: string | null;
 	onSelectClip?: (id: string | null) => void;
 	annotationRegions?: AnnotationRegion[];
-	onAnnotationAdded?: (span: Span, trackIndex?: number) => void;
+	onAnnotationAdded?: (span: Span, trackIndex?: number, initialType?: AnnotationType) => void;
 	onAnnotationSpanChange?: (id: string, span: Span, trackIndex?: number) => void;
 	onAnnotationDelete?: (id: string) => void;
 	selectedAnnotationId?: string | null;
@@ -67,9 +81,27 @@ export interface TimelineEditorProps {
 	onAudioAdded?: (span: Span, audioPath: string, trackIndex?: number) => void;
 	onAudioSpanChange?: (id: string, span: Span, trackIndex?: number) => void;
 	onAudioDelete?: (id: string) => void;
+	onSuggestSfx?: () => void;
 	selectedAudioId?: string | null;
 	onSelectAudio?: (id: string | null) => void;
+	transitionRegions?: TransitionRegion[];
+	onApplyCutTransition?: (params: {
+		type: TransitionType;
+		durationMs: number;
+		cutTimeMs: number;
+		existingId?: string;
+	}) => void;
+	onTransitionSpanChange?: (id: string, span: Span, trackIndex?: number) => void;
+	onTransitionDelete?: (id: string) => void;
+	selectedTransitionId?: string | null;
+	onSelectTransition?: (id: string | null) => void;
+	memeRegions?: MemeRegion[];
+	onMemeSpanChange?: (id: string, span: Span, trackIndex?: number) => void;
+	onMemeDelete?: (id: string) => void;
+	selectedMemeId?: string | null;
+	onSelectMeme?: (id: string | null) => void;
 	captionRegions?: CaptionCue[];
+	keystrokes?: KeystrokeEvent[];
 	onCaptionSpanChange?: (id: string, span: Span) => void;
 	onCaptionDelete?: (id: string) => void;
 	onCaptionAdded?: (span: Span) => void;
@@ -86,7 +118,10 @@ export interface TimelineEditorProps {
 	sourceAudioTrackSettings?: SourceAudioTrackSettings;
 	getSourceAudioTrackSettingsForClip?: (clipId: string | null) => SourceAudioTrackSettings;
 	onSourceAudioTracksMetaChange?: (tracks: SourceAudioTrackMeta) => void;
+	aspectRatio?: AspectRatio;
 }
+
+const EMPTY_REGIONS: never[] = [];
 
 function extractLocalPathFromMediaServerUrl(input: string | null | undefined): string | null {
 	if (!input) return null;
@@ -105,9 +140,12 @@ function extractLocalPathFromMediaServerUrl(input: string | null | undefined): s
 
 export interface TimelineEditorHandle {
 	addZoom: () => void;
+	addZoomOut?: () => void;
 	suggestZooms: () => void;
+	suggestSfx?: () => void;
 	splitClip: () => void;
 	addAnnotation: (trackIndex?: number) => void;
+	addHighlight?: (trackIndex?: number) => void;
 	addAudio: (trackIndex?: number) => Promise<void>;
 	keyframes: { id: string; time: number }[];
 }
@@ -130,6 +168,12 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onZoomDelete,
 			selectedZoomId,
 			onSelectZoom,
+			zoomOutRegions,
+			onZoomOutAdded,
+			onZoomOutSpanChange,
+			onZoomOutDelete,
+			selectedZoomOutId,
+			onSelectZoomOut,
 			trimRegions = [],
 			onTrimSpanChange,
 			clipRegions = [],
@@ -150,9 +194,22 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onAudioAdded,
 			onAudioSpanChange,
 			onAudioDelete,
+			onSuggestSfx,
 			selectedAudioId,
 			onSelectAudio,
+			transitionRegions,
+			onApplyCutTransition,
+			onTransitionSpanChange,
+			onTransitionDelete,
+			selectedTransitionId,
+			onSelectTransition,
+			memeRegions,
+			onMemeSpanChange,
+			onMemeDelete,
+			selectedMemeId,
+			onSelectMeme,
 			captionRegions = [],
+			keystrokes = [],
 			onCaptionSpanChange,
 			onCaptionDelete,
 			onCaptionAdded,
@@ -169,9 +226,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			sourceAudioTrackSettings = {},
 			getSourceAudioTrackSettingsForClip,
 			onSourceAudioTracksMetaChange,
+			aspectRatio,
 		},
 		ref,
 	) {
+		const isVertical = aspectRatio === "9:16" || aspectRatio === "4:5";
 		const t = useScopedT("settings");
 		const totalMs = useMemo(
 			() => Math.max(0, Math.round(videoDuration * 1000)),
@@ -231,6 +290,17 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							end: zoom.endMs + delta,
 						};
 					}
+					if (zoomOutRegions) {
+						for (const zoomOut of zoomOutRegions) {
+							const overlaps =
+								zoomOut.startMs < oldClip.endMs && zoomOut.endMs > oldClip.startMs;
+							if (!overlaps) continue;
+							previewSpans[zoomOut.id] = {
+								start: zoomOut.startMs + delta,
+								end: zoomOut.endMs + delta,
+							};
+						}
+					}
 				}
 
 				if (removedSegments.length > 0) {
@@ -241,11 +311,20 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						);
 						if (removed) hiddenZoomIds.add(zoom.id);
 					}
+					if (zoomOutRegions) {
+						for (const zoomOut of zoomOutRegions) {
+							const removed = removedSegments.some(
+								(segment) =>
+									zoomOut.startMs < segment.endMs && zoomOut.endMs > segment.startMs,
+							);
+							if (removed) hiddenZoomIds.add(zoomOut.id);
+						}
+					}
 				}
 			}
 
 			return { previewSpans, hiddenZoomIds };
-		}, [clipRegions, liveSpanPreviewById, zoomRegions]);
+		}, [clipRegions, liveSpanPreviewById, zoomRegions, zoomOutRegions]);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
 		const { peaks: sourceAudioPeaks, loading: sourceAudioLoading } = useTimelineAudioPeaks(
 			videoPath,
@@ -338,10 +417,13 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			handleKeyframeMove,
 			clearSelectedBlocks,
 			handleSelectZoom,
+			handleSelectZoomOut,
 			handleSelectClip,
 			handleSelectAnnotation,
 			handleSelectAudio,
 			handleSelectCaption,
+			handleSelectTransition,
+			handleSelectMeme,
 			hasOverlap,
 			timelineItems,
 			allRegionSpans,
@@ -349,6 +431,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			handleItemSpanChange,
 			canPlaceZoomAtMs,
 			addZoomAtMs,
+			canPlaceZoomOutAtMs,
+			addZoomOutAtMs,
 			canPlaceCaptionAtMs,
 			addCaptionAtMs,
 			resolveCaptionSpanAtMs,
@@ -369,6 +453,12 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onZoomDelete,
 			selectedZoomId,
 			onSelectZoom,
+			zoomOutRegions,
+			onZoomOutAdded,
+			onZoomOutSpanChange,
+			onZoomOutDelete,
+			selectedZoomOutId,
+			onSelectZoomOut,
 			trimRegions,
 			onTrimSpanChange,
 			clipRegions,
@@ -389,9 +479,21 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onAudioAdded,
 			onAudioSpanChange,
 			onAudioDelete,
+			onSuggestSfx,
 			selectedAudioId,
 			onSelectAudio,
+			transitionRegions: transitionRegions ?? EMPTY_REGIONS,
+			onTransitionSpanChange,
+			onTransitionDelete,
+			selectedTransitionId,
+			onSelectTransition,
+			memeRegions: memeRegions ?? EMPTY_REGIONS,
+			onMemeSpanChange,
+			onMemeDelete,
+			selectedMemeId,
+			onSelectMeme,
 			captionCues: captionRegions,
+			keystrokes,
 			onCaptionSpanChange,
 			onCaptionDelete,
 			onCaptionAdded,
@@ -486,21 +588,29 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							onSeek={onSeek}
 							onAddZoomAtMs={addZoomAtMs}
 							canPlaceZoomAtMs={canPlaceZoomAtMs}
+							onAddZoomOutAtMs={addZoomOutAtMs}
+							canPlaceZoomOutAtMs={canPlaceZoomOutAtMs}
 							onAddCaptionAtMs={addCaptionAtMs}
 							canPlaceCaptionAtMs={canPlaceCaptionAtMs}
 							resolveCaptionSpanAtMs={resolveCaptionSpanAtMs}
 							captionsEnabled={captionsEnabled}
 							captionQuickAddEnabled={captionQuickAddEnabled}
 							onSelectZoom={handleSelectZoom}
+							onSelectZoomOut={handleSelectZoomOut}
 							onSelectClip={handleSelectClip}
 							onSelectAnnotation={handleSelectAnnotation}
 							onSelectAudio={handleSelectAudio}
 							onSelectCaption={handleSelectCaption}
+							onSelectTransition={handleSelectTransition}
+							onSelectMeme={handleSelectMeme}
 							selectedZoomId={selectedZoomId}
+							selectedZoomOutId={selectedZoomOutId}
 							selectedClipId={selectedClipId}
 							selectedAnnotationId={selectedAnnotationId}
 							selectedAudioId={selectedAudioId}
 							selectedCaptionId={selectedCaptionId}
+							selectedTransitionId={selectedTransitionId}
+							selectedMemeId={selectedMemeId}
 							selectAllBlocksActive={selectAllBlocksActive}
 							onClearBlockSelection={clearSelectedBlocks}
 							keyframes={keyframes}
@@ -511,9 +621,21 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}
 							isDragging={isDragging}
 							isLoading={isLoading}
+							isVertical={isVertical}
+							transitionRegions={transitionRegions}
+							onApplyCutTransition={onApplyCutTransition}
+							onRemoveTransition={onTransitionDelete}
 						/>
 					</TimelineWrapper>
 				</div>
+				<TimelineScrollbar
+					totalMs={totalMs}
+					visibleRange={clampedRange}
+					currentTimeMs={currentTimeMs}
+					minVisibleRangeMs={timelineScale.minVisibleRangeMs}
+					onRangeChange={setRange}
+					onSeek={onSeek}
+				/>
 			</div>
 		);
 	},

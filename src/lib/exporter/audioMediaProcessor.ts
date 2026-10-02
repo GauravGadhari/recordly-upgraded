@@ -1,13 +1,39 @@
 import { WebDemuxer } from "web-demuxer";
 import { AudioTimelineProcessor } from "./audioTimelineProcessor";
 import { DECODE_BACKPRESSURE_LIMIT, OFFLINE_AUDIO_SAMPLE_RATE } from "./audioProcessorShared";
-import { resolveMediaElementSource } from "./localMediaSource";
+import { isBundledAssetPath, loadMediaArrayBuffer, resolveMediaElementSource } from "./localMediaSource";
 
 export class AudioMediaProcessor extends AudioTimelineProcessor {
+	private decodedAudioCache = new Map<string, AudioBuffer>();
+
 	protected async decodeAudioFromUrl(url: string): Promise<AudioBuffer | null> {
+		if (!url) return null;
+
+		const cached = this.decodedAudioCache.get(url);
+		if (cached) return cached;
+
+		const isDataUrl = url.startsWith("data:");
+		const isBundledAsset = isBundledAssetPath(url);
+		const isAudioFormat = /\.(mp3|wav|ogg|aac|flac|m4a)(\?.*)?$/i.test(url);
+
+		// Audio clips (SFX, procedural data URLs, MP3/WAV) must bypass WebDemuxer.
+		// WebDemuxer fails on data URLs and unsupported audio containers, whereas
+		// bulk decode via OfflineAudioContext is instant, supports MP3/WAV/AAC, and never hangs.
+		if (isDataUrl || isBundledAsset || isAudioFormat) {
+			const buffer = await this.bulkDecodeFromUrl(url, OFFLINE_AUDIO_SAMPLE_RATE);
+			if (buffer) this.decodedAudioCache.set(url, buffer);
+			return buffer;
+		}
+
 		try {
-			const buffer = await this.streamDecodeFromUrl(url);
-			if (buffer) return buffer;
+			const timeoutPromise = new Promise<null>((_, reject) =>
+				setTimeout(() => reject(new Error("Streaming audio demux timed out after 10s")), 10_000),
+			);
+			const buffer = await Promise.race([this.streamDecodeFromUrl(url), timeoutPromise]);
+			if (buffer) {
+				this.decodedAudioCache.set(url, buffer);
+				return buffer;
+			}
 		} catch (error) {
 			console.warn(
 				"[AudioProcessor] Streaming decode failed, falling back to bulk decode:",
@@ -15,7 +41,12 @@ export class AudioMediaProcessor extends AudioTimelineProcessor {
 				error,
 			);
 		}
-		return this.bulkDecodeFromUrl(url, OFFLINE_AUDIO_SAMPLE_RATE);
+
+		const fallbackBuffer = await this.bulkDecodeFromUrl(url, OFFLINE_AUDIO_SAMPLE_RATE);
+		if (fallbackBuffer) {
+			this.decodedAudioCache.set(url, fallbackBuffer);
+		}
+		return fallbackBuffer;
 	}
 
 	// Streaming decode via WebDemuxer + AudioDecoder. Decodes audio chunk-by-chunk
@@ -219,15 +250,9 @@ export class AudioMediaProcessor extends AudioTimelineProcessor {
 		sampleRate: number,
 	): Promise<AudioBuffer | null> {
 		try {
-			const source = await resolveMediaElementSource(url);
-			try {
-				const response = await fetch(source.src);
-				const arrayBuffer = await response.arrayBuffer();
-				const tempCtx = new OfflineAudioContext(2, 1, sampleRate);
-				return await tempCtx.decodeAudioData(arrayBuffer);
-			} finally {
-				source.revoke();
-			}
+			const arrayBuffer = await loadMediaArrayBuffer(url);
+			const tempCtx = new OfflineAudioContext(2, 1, sampleRate);
+			return await tempCtx.decodeAudioData(arrayBuffer);
 		} catch (error) {
 			console.warn("[AudioProcessor] Failed to decode audio from URL:", url, error);
 			return null;

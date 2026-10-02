@@ -2,11 +2,14 @@ import {
 	Check,
 	CaretDown as ChevronDown,
 	Crop,
+	Highlighter,
 	ChatText as MessageSquare,
 	MusicNote as Music,
 	Scissors,
+	Sparkle,
 	MagicWand as WandSparkles,
 	MagnifyingGlassPlus as ZoomIn,
+	MagnifyingGlassMinus as ZoomOut,
 } from "@phosphor-icons/react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,14 +39,19 @@ interface TimelineToolbarProps {
 	onAspectRatioChange?: (aspectRatio: AspectRatio) => void;
 	onOpenCropEditor?: () => void;
 	onAddZoom: () => void;
+	onAddZoomOut?: () => void;
 	onSuggestZooms: () => void;
 	onAddAnnotation: () => void;
+	onAddHighlight?: () => void;
 	onAddAudio: () => void;
+	onSuggestSfx?: () => void;
 	onSplitClip: () => void;
 	cropLabel: string;
 	addZoomLabel: string;
+	addZoomOutLabel?: string;
 	suggestZoomsLabel: string;
 	addAnnotationLabel: string;
+	addHighlightLabel?: string;
 	addAudioLabel: string;
 	splitClipLabel: string;
 }
@@ -61,14 +69,19 @@ export default function TimelineToolbar({
 	onAspectRatioChange,
 	onOpenCropEditor,
 	onAddZoom,
+	onAddZoomOut,
 	onSuggestZooms,
 	onAddAnnotation,
+	onAddHighlight,
 	onAddAudio,
+	onSuggestSfx,
 	onSplitClip,
 	cropLabel,
 	addZoomLabel,
+	addZoomOutLabel,
 	suggestZoomsLabel,
 	addAnnotationLabel,
+	addHighlightLabel,
 	addAudioLabel,
 	splitClipLabel,
 }: TimelineToolbarProps) {
@@ -85,6 +98,18 @@ export default function TimelineToolbar({
 				>
 					<ZoomIn className="w-4 h-4" />
 				</Button>
+				{onAddZoomOut && (aspectRatio === "9:16" || aspectRatio === "4:5") ? (
+					<Button
+						onClick={onAddZoomOut}
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 text-muted-foreground hover:text-cyan-400 hover:bg-cyan-500/10 transition-all"
+						title={addZoomOutLabel ?? "Add Zoom Out (Fit Full Window)"}
+						aria-label={addZoomOutLabel ?? "Add Zoom Out (Fit Full Window)"}
+					>
+						<ZoomOut className="w-4 h-4" />
+					</Button>
+				) : null}
 				<Button
 					onClick={onSuggestZooms}
 					variant="ghost"
@@ -105,6 +130,18 @@ export default function TimelineToolbar({
 				>
 					<MessageSquare className="w-4 h-4" />
 				</Button>
+				{onAddHighlight ? (
+					<Button
+						onClick={onAddHighlight}
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 text-muted-foreground hover:text-[#FACC15] hover:bg-[#FACC15]/10 transition-all"
+						title={addHighlightLabel ?? "Add Highlighting Area"}
+						aria-label={addHighlightLabel ?? "Add Highlighting Area"}
+					>
+						<Highlighter className="w-4 h-4" />
+					</Button>
+				) : null}
 				<Button
 					onClick={onAddAudio}
 					variant="ghost"
@@ -115,6 +152,18 @@ export default function TimelineToolbar({
 				>
 					<Music className="w-4 h-4" />
 				</Button>
+				{onSuggestSfx ? (
+					<Button
+						onClick={onSuggestSfx}
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 text-muted-foreground hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
+						title="Auto-Generate SFX (Clicks, Whooshes, Zooms)"
+						aria-label="Auto-Generate SFX"
+					>
+						<Sparkle className="w-4 h-4" />
+					</Button>
+				) : null}
 				<Button
 					onClick={onSplitClip}
 					variant="ghost"

@@ -125,6 +125,42 @@ export function getCursorMonitorExePath(): string {
 	return resolvePreferredWindowsNativeHelperPath("cursor-monitor", "cursor-monitor.exe");
 }
 
+export function getLinuxCursorMonitorBinaryPath(): string {
+	const prebundledPath = getPrebundledNativeHelperPath("cursor-monitor", getNativeArchTag("linux"));
+	if (existsSync(prebundledPath)) {
+		return prebundledPath;
+	}
+	const buildPath = resolveUnpackedAppPath(
+		"electron",
+		"native",
+		"cursor-monitor",
+		"build",
+		"cursor-monitor-linux",
+	);
+	if (existsSync(buildPath)) {
+		return buildPath;
+	}
+	return prebundledPath;
+}
+
+export function getLinuxCaptureBinaryPath(): string {
+	const prebundledPath = getPrebundledNativeHelperPath("linux-capture", getNativeArchTag("linux"));
+	if (existsSync(prebundledPath)) {
+		return prebundledPath;
+	}
+	const sourcePath = resolveUnpackedAppPath(
+		"electron",
+		"native",
+		"linux-capture",
+		"build",
+		"linux-capture",
+	);
+	if (existsSync(sourcePath)) {
+		return sourcePath;
+	}
+	return prebundledPath;
+}
+
 async function migrateLegacyNativeHelperBinaries(): Promise<void> {
 	const legacyToCurrentPaths: Array<[string, string]> = [
 		[

@@ -3,6 +3,7 @@ import type { EditorPreferences } from "../editorPreferences";
 import type {
 	CropRegion,
 	CursorClickEffectStyle,
+	CursorSfxSettings,
 	CursorStyle,
 	WebcamOverlaySettings,
 	ZoomMotionBlurTuning,
@@ -13,6 +14,8 @@ import {
 	DEFAULT_CONNECTED_ZOOM_EASING,
 	DEFAULT_CONNECTED_ZOOM_GAP_MS,
 	DEFAULT_CROP_REGION,
+	DEFAULT_CURSOR_CLICK_DEPTH,
+	DEFAULT_CURSOR_SFX_SETTINGS,
 	DEFAULT_CURSOR_STYLE,
 	DEFAULT_WEBCAM_OVERLAY,
 	DEFAULT_ZOOM_IN_DURATION_MS,
@@ -106,7 +109,13 @@ export function useAppearanceState(preferences: EditorPreferences) {
 	const [cursorClickBounceDuration, setCursorClickBounceDuration] = useState(
 		preferences.cursorClickBounceDuration,
 	);
+	const [cursorClickDepth, setCursorClickDepth] = useState(
+		preferences.cursorClickDepth ?? DEFAULT_CURSOR_CLICK_DEPTH,
+	);
 	const [cursorSway, setCursorSway] = useState(preferences.cursorSway);
+	const [cursorSfx, setCursorSfx] = useState<CursorSfxSettings>(
+		preferences.cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS,
+	);
 	const [borderRadius, setBorderRadius] = useState(preferences.borderRadius);
 	const [padding, setPadding] = useState(preferences.padding);
 	const [cropRegion, setCropRegion] = useState<CropRegion>(DEFAULT_CROP_REGION);
@@ -188,8 +197,12 @@ export function useAppearanceState(preferences: EditorPreferences) {
 		setCursorClickBounce,
 		cursorClickBounceDuration,
 		setCursorClickBounceDuration,
+		cursorClickDepth,
+		setCursorClickDepth,
 		cursorSway,
 		setCursorSway,
+		cursorSfx,
+		setCursorSfx,
 		borderRadius,
 		setBorderRadius,
 		padding,

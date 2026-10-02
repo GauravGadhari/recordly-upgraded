@@ -1,8 +1,9 @@
 import type { ExportProgress } from "@/lib/exporter";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import { toFileUrl } from "../projectPersistence";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
-import type { CursorTelemetryPoint, SpeedRegion, ZoomRegion } from "../types";
+import type { CursorTelemetryPoint, SpeedRegion, VerticalTrackingMode, ZoomRegion } from "../types";
 
 type AppearanceState = ReturnType<typeof useAppearanceState>;
 type TimelineState = ReturnType<typeof useTimelineState>;
@@ -17,6 +18,8 @@ type BuildExportRenderOptionsInput = {
 	previewWidth: number;
 	previewHeight: number;
 	shadowIntensity: number;
+	aspectRatio?: AspectRatio;
+	verticalTrackingMode?: VerticalTrackingMode;
 	onProgress: (progress: ExportProgress) => void;
 };
 
@@ -30,6 +33,8 @@ export function buildExportRenderOptions({
 	previewWidth,
 	previewHeight,
 	shadowIntensity,
+	aspectRatio,
+	verticalTrackingMode,
 	onProgress,
 }: BuildExportRenderOptionsInput) {
 	return {
@@ -59,9 +64,14 @@ export function buildExportRenderOptions({
 			appearance.resolvedWebcamVideoUrl ??
 			(appearance.webcam.sourcePath ? toFileUrl(appearance.webcam.sourcePath) : null),
 		annotationRegions: timeline.annotationRegions,
+		transitionRegions: timeline.transitionRegions,
+		memeRegions: timeline.memeRegions,
 		autoCaptions: timeline.autoCaptions,
 		autoCaptionSettings: timeline.autoCaptionSettings,
+		keystrokes: timeline.keystrokes,
+		keystrokeSettings: timeline.keystrokeSettings,
 		zoomRegions: effectiveZoomRegions,
+		zoomOutRegions: timeline.zoomOutRegions,
 		cursorTelemetry: effectiveCursorTelemetry,
 		showCursor: effectiveShowCursor,
 		cursorStyle: appearance.cursorStyle,
@@ -83,9 +93,12 @@ export function buildExportRenderOptions({
 		cursorClickEffectDurationMs: appearance.cursorClickEffectDurationMs,
 		cursorClickBounce: appearance.cursorClickBounce,
 		cursorClickBounceDuration: appearance.cursorClickBounceDuration,
+		cursorClickDepth: appearance.cursorClickDepth,
 		cursorSway: appearance.cursorSway,
 		previewWidth,
 		previewHeight,
+		aspectRatio,
+		verticalTrackingMode,
 		onProgress,
 	};
 }

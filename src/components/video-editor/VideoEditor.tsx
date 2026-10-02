@@ -77,6 +77,7 @@ export default function VideoEditor() {
 		projectNameInputRef,
 		projectSaveDialogInputRef,
 		nextZoomIdRef,
+		nextZoomOutIdRef,
 		nextClipIdRef,
 		clipInitializedRef,
 		autoFullTrackClipIdRef,
@@ -231,6 +232,7 @@ export default function VideoEditor() {
 		projectNameInputRef,
 		projectSaveDialogInputRef,
 		nextZoomIdRef,
+		nextZoomOutIdRef,
 		nextClipIdRef,
 		nextAudioIdRef,
 		nextAnnotationIdRef,
@@ -274,6 +276,7 @@ export default function VideoEditor() {
 		videoPlaybackRef,
 		timelineRef,
 		nextZoomIdRef,
+		nextZoomOutIdRef,
 		nextClipIdRef,
 		nextAudioIdRef,
 		nextAnnotationIdRef,
@@ -297,6 +300,12 @@ export default function VideoEditor() {
 		clipCommands,
 		audioCommands,
 		annotationCommands,
+		transitionCommands,
+		memeCommands,
+		handleAddSound,
+		handleAddTransitionAtPlayhead,
+		handleAddMemeAtPlayhead,
+		keystrokes: keystrokesController,
 	} = editing;
 	const { effectiveSpeedRegions, effectiveZoomRegions } = projection;
 
@@ -326,6 +335,8 @@ export default function VideoEditor() {
 		captionSidecarPayload,
 		experimentalNvidiaCudaExport,
 		nvidiaCudaExportAvailable,
+		aspectRatio,
+		verticalTrackingMode: ui.verticalTrackingMode,
 		remountPreview,
 	});
 	const previewAspectRatioValue = getAspectRatioValue(
@@ -348,10 +359,16 @@ export default function VideoEditor() {
 		audioCommands,
 		captionCommands,
 		annotationCommands,
+		transitionCommands,
+		memeCommands,
+		onAddSound: handleAddSound,
+		onAddTransitionAtPlayhead: handleAddTransitionAtPlayhead,
+		onAddMemeAtPlayhead: handleAddMemeAtPlayhead,
 		autoCaptionController,
 		effectiveShowCursor,
 		handleShowCursorChange,
 		currentTime,
+		duration,
 		isPlaying,
 		aspectRatio,
 		setAspectRatio,
@@ -364,6 +381,14 @@ export default function VideoEditor() {
 		setNativeCaptureUnavailableModalOpen,
 		handleUploadWebcam,
 		handleClearWebcam,
+		onKeystrokeSettingsChange: timeline.setKeystrokeSettings,
+		onUpdateKeystroke: keystrokesController.updateKeystroke,
+		onDeleteKeystroke: keystrokesController.deleteKeystroke,
+		onToggleKeystrokeEnabled: keystrokesController.toggleKeystrokeEnabled,
+		onSeekToTime: (timeMs) => {
+			setCurrentTime(timeMs / 1000);
+			videoPlaybackRef.current?.seekTimeline(timeMs / 1000);
+		},
 	});
 	return (
 		<EditorShell
