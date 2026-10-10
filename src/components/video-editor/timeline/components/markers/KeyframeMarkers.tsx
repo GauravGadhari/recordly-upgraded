@@ -1,5 +1,6 @@
 import { useTimelineContext } from "dnd-timeline";
 import React, { useEffect, useState } from "react";
+import { TIMELINE_SIDEBAR_WIDTH_PX } from "../../timelineLayout";
 
 interface Keyframe {
 	id: string;
@@ -24,6 +25,7 @@ const KeyframeMarkers: React.FC<KeyframeMarkersProps> = ({
 	timelineRef,
 }) => {
 	const { sidebarWidth, range, valueToPixels, pixelsToValue } = useTimelineContext();
+	const effectiveSidebarWidth = sidebarWidth > 0 ? sidebarWidth : TIMELINE_SIDEBAR_WIDTH_PX;
 	const [draggingKeyframeId, setDraggingKeyframeId] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -33,7 +35,7 @@ const KeyframeMarkers: React.FC<KeyframeMarkersProps> = ({
 			if (!timelineRef.current) return;
 
 			const rect = timelineRef.current.getBoundingClientRect();
-			const clickX = e.clientX - rect.left - sidebarWidth;
+			const clickX = e.clientX - rect.left - effectiveSidebarWidth;
 			const relativeMs = pixelsToValue(clickX);
 			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
 
@@ -59,7 +61,7 @@ const KeyframeMarkers: React.FC<KeyframeMarkersProps> = ({
 		draggingKeyframeId,
 		onKeyframeMove,
 		timelineRef,
-		sidebarWidth,
+		effectiveSidebarWidth,
 		range.start,
 		videoDurationMs,
 		pixelsToValue,
@@ -77,7 +79,7 @@ const KeyframeMarkers: React.FC<KeyframeMarkersProps> = ({
 						key={kf.id}
 						className={`absolute top-8 cursor-grab active:cursor-grabbing ${isSelected ? "ring-2 ring-[#2563EB]" : ""}`}
 						style={{
-							left: `${sidebarWidth + offset - 8}px`,
+							left: `${effectiveSidebarWidth + offset - 8}px`,
 							zIndex: isDragging ? 50 : 40,
 							transition: isDragging ? "none" : "left 0.1s ease-out",
 						}}

@@ -4,6 +4,7 @@ import {
 	calculateTimelineScale,
 	createInitialRange,
 	formatPlayheadTime,
+	formatSMPTETimecode,
 	formatTimeLabel,
 	normalizeWheelDeltaToPixels,
 } from "./time";
@@ -36,6 +37,15 @@ describe("timeline core/time", () => {
 	it("formats playhead labels for sub-minute and minute timelines", () => {
 		expect(formatPlayheadTime(1234)).toBe("1.2s");
 		expect(formatPlayheadTime(61_400)).toBe("1:01.4");
+	});
+
+	it("formats accurate SMPTE timecode (00:00:00:00)", () => {
+		expect(formatSMPTETimecode(0)).toBe("00:00:00:00");
+		expect(formatSMPTETimecode(-50)).toBe("00:00:00:00");
+		expect(formatSMPTETimecode(1000)).toBe("00:00:01:00");
+		expect(formatSMPTETimecode(1500, 30)).toBe("00:00:01:15");
+		expect(formatSMPTETimecode(60_000)).toBe("00:01:00:00");
+		expect(formatSMPTETimecode(3_661_500, 30)).toBe("01:01:01:15");
 	});
 
 	it("normalizes wheel delta by deltaMode", () => {

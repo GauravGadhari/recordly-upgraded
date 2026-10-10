@@ -1,4 +1,4 @@
-import { Plus } from "@phosphor-icons/react";
+import { Clock, Plus } from "@phosphor-icons/react";
 import { useTimelineContext } from "dnd-timeline";
 import {
 	type MouseEvent,
@@ -37,6 +37,7 @@ import {
 	isKeystrokeTrackRowId,
 	isMemeTrackRowId,
 } from "../../core/rows";
+import { formatSMPTETimecode } from "../../core/time";
 import type { TimelineRenderItem } from "../../core/timelineTypes";
 import { DEFAULT_CAPTION_DURATION_MS } from "../../hooks/actions/useTimelineCaptionActions";
 import { useTimelineAudioPeaks } from "../../hooks/useTimelineAudioPeaks";
@@ -48,6 +49,7 @@ import {
 	getTimelineRowsMinHeightPx,
 	getTimelineViewportStretchFactor,
 	TIMELINE_AXIS_HEIGHT_PX,
+	TIMELINE_SIDEBAR_WIDTH_PX,
 } from "../../timelineLayout";
 import TimelineAxis from "../axis/TimelineAxis";
 import ClipCutTransitionsOverlay from "../overlays/ClipCutTransitionsOverlay";
@@ -1229,6 +1231,7 @@ export default function TimelineCanvas({
 }: TimelineCanvasProps) {
 	const { setTimelineRef, style, sidebarWidth, direction, range, valueToPixels, pixelsToValue } =
 		useTimelineContext();
+	const effectiveSidebarWidth = sidebarWidth > 0 ? sidebarWidth : TIMELINE_SIDEBAR_WIDTH_PX;
 	const localTimelineRef = useRef<HTMLDivElement | null>(null);
 	const [isSeeking, setIsSeeking] = useState(false);
 	const seekRafRef = useRef<number | null>(null);
@@ -1263,8 +1266,8 @@ export default function TimelineCanvas({
 			const rect = e.currentTarget.getBoundingClientRect();
 			const clickX =
 				direction === "rtl"
-					? rect.right - sidebarWidth - e.clientX
-					: e.clientX - rect.left - sidebarWidth;
+					? rect.right - effectiveSidebarWidth - e.clientX
+					: e.clientX - rect.left - effectiveSidebarWidth;
 			if (clickX < 0) return;
 			const relativeMs = pixelsToValue(clickX);
 			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
@@ -1283,7 +1286,7 @@ export default function TimelineCanvas({
 			onSelectMeme,
 			onClearBlockSelection,
 			videoDurationMs,
-			sidebarWidth,
+			effectiveSidebarWidth,
 			direction,
 			range.start,
 			pixelsToValue,
@@ -1294,12 +1297,12 @@ export default function TimelineCanvas({
 		(clientX: number, rect: DOMRect) => {
 			const clickX =
 				direction === "rtl"
-					? rect.right - sidebarWidth - clientX
-					: clientX - rect.left - sidebarWidth;
-			const relativeMs = pixelsToValue(clickX);
+					? rect.right - effectiveSidebarWidth - clientX
+					: clientX - rect.left - effectiveSidebarWidth;
+			const relativeMs = pixelsToValue(Math.max(0, clickX));
 			return Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
 		},
-		[direction, pixelsToValue, range.start, sidebarWidth, videoDurationMs],
+		[direction, pixelsToValue, range.start, effectiveSidebarWidth, videoDurationMs],
 	);
 
 	const handleTimelineMouseDown = useCallback(
@@ -1459,7 +1462,7 @@ export default function TimelineCanvas({
 		handleCaptionRowClick,
 	} = useTimelineHover({
 		direction,
-		sidebarWidth,
+		sidebarWidth: effectiveSidebarWidth,
 		rangeStart: range.start,
 		rangeEnd: range.end,
 		videoDurationMs,
@@ -1490,6 +1493,23 @@ export default function TimelineCanvas({
 			onMouseMove={handleTimelineMouseMove}
 			onMouseLeave={handleTimelineMouseLeave}
 		>
+			{/* Master Timecode Stamp (Top-Left of Timeline, perfectly aligned with track headers) */}
+			<div
+				className="absolute left-0 top-0 h-8 z-30 flex items-center justify-between px-2.5 bg-editor-surface/95 backdrop-blur-sm border-r border-b border-foreground/10 select-none pointer-events-auto"
+				style={{
+					width: `${effectiveSidebarWidth}px`,
+				}}
+				title="Timeline Timecode (00:00:00:00)"
+			>
+				<div className="flex items-center gap-1.5 text-[9px] font-bold tracking-wider uppercase text-muted-foreground/70">
+					<Clock className="w-3.5 h-3.5 text-[#2563EB]" weight="bold" />
+					<span>TC</span>
+				</div>
+				<span className="font-mono text-[11px] font-bold tabular-nums tracking-wider text-[#2563EB] bg-[#2563EB]/10 px-1.5 py-0.5 rounded border border-[#2563EB]/25 shadow-sm">
+					{formatSMPTETimecode(currentTimeMs)}
+				</span>
+			</div>
+
 			<TimelineAxis videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
 			<PlaybackCursor
 				currentTimeMs={currentTimeMs}
@@ -1504,11 +1524,11 @@ export default function TimelineCanvas({
 					className="absolute top-0 bottom-0 z-[45] pointer-events-none"
 					style={{
 						[sideProperty === "right" ? "marginRight" : "marginLeft"]:
-							`${sidebarWidth - 1}px`,
+							`${effectiveSidebarWidth}px`,
 					}}
 				>
 					<div
-						className="absolute top-0 bottom-0 w-px bg-foreground/35"
+						className="absolute top-0 bottom-0 w-px -translate-x-1/2 bg-foreground/35"
 						style={{ [sideProperty]: `${timelineGhostOffsetPx}px` }}
 					/>
 				</div>

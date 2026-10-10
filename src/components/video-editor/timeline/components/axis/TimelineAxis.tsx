@@ -2,6 +2,7 @@ import { useTimelineContext } from "dnd-timeline";
 import { useMemo, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { calculateAxisScale, formatTimeLabel } from "../../core/time";
+import { TIMELINE_SIDEBAR_WIDTH_PX } from "../../timelineLayout";
 
 interface TimelineAxisProps {
 	videoDurationMs: number;
@@ -10,6 +11,7 @@ interface TimelineAxisProps {
 
 export default function TimelineAxis({ videoDurationMs, currentTimeMs }: TimelineAxisProps) {
 	const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
+	const effectiveSidebarWidth = sidebarWidth > 0 ? sidebarWidth : TIMELINE_SIDEBAR_WIDTH_PX;
 	const sideProperty = direction === "rtl" ? "right" : "left";
 
 	const { intervalMs } = useMemo(
@@ -56,7 +58,7 @@ export default function TimelineAxis({ videoDurationMs, currentTimeMs }: Timelin
 		<div
 			className="h-8 bg-editor-bg border-b border-foreground/10 relative overflow-hidden select-none"
 			style={{
-				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
+				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${effectiveSidebarWidth}px`,
 			}}
 		>
 			{markers.minorTicks.map((time) => {
@@ -72,6 +74,7 @@ export default function TimelineAxis({ videoDurationMs, currentTimeMs }: Timelin
 
 			{markers.markers.map((marker) => {
 				const offset = valueToPixels(marker.time - range.start);
+				const isNearLeft = offset < 24;
 				const markerStyle: CSSProperties = {
 					position: "absolute",
 					bottom: 0,
@@ -80,18 +83,20 @@ export default function TimelineAxis({ videoDurationMs, currentTimeMs }: Timelin
 					flexDirection: "row",
 					alignItems: "flex-end",
 					[sideProperty]: `${offset}px`,
-					transform: direction === "rtl" ? "translateX(50%)" : "translateX(-50%)",
+					transform: direction === "rtl"
+						? (isNearLeft ? "translateX(0)" : "translateX(50%)")
+						: (isNearLeft ? "translateX(0)" : "translateX(-50%)"),
 				};
 
 				return (
 					<div key={marker.time} style={markerStyle}>
-						<div className="flex flex-col items-center pb-1">
+						<div className={cn("flex flex-col pb-1", isNearLeft ? "items-start pl-0.5" : "items-center")}>
 							<div className="mb-1.5 h-[5px] w-[5px] rounded-full bg-foreground/30" />
 							<span
 								className={cn(
-									"text-[10px] font-medium tabular-nums tracking-tight",
+									"text-[10px] font-medium tabular-nums tracking-tight font-mono",
 									Math.abs(marker.time - currentTimeMs) < 1
-										? "text-[#2563EB]"
+										? "text-[#2563EB] font-semibold"
 										: "text-foreground/40",
 								)}
 							>

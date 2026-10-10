@@ -40,6 +40,7 @@ import type { useZoomRegionCommands } from "../hooks/useZoomRegionCommands";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
 import type { TimelineEditorHandle } from "../timeline/TimelineEditor";
+import { formatSMPTETimecode } from "../timeline/core/time";
 import type { VideoPlaybackRef } from "../VideoPlayback";
 import { EditorVideoPreview } from "./EditorVideoPreview";
 
@@ -79,13 +80,6 @@ type Props = {
 	setIsPlaying: Dispatch<SetStateAction<boolean>>;
 	setError: Dispatch<SetStateAction<string | null>>;
 };
-
-function formatTime(seconds: number) {
-	if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-	const mins = Math.floor(seconds / 60);
-	const secs = Math.floor(seconds % 60);
-	return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
 
 export function EditorPreviewPanel(props: Props) {
 	const {
@@ -432,8 +426,8 @@ export function EditorPreviewPanel(props: Props) {
 
 				<div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
 					<div className="pointer-events-auto flex items-center gap-1.5">
-						<span className="mr-1 text-[10px] font-medium tabular-nums text-muted-foreground">
-							{formatTime(projection.timelinePlayheadTime)}
+						<span className="mr-1 text-[10px] font-mono font-semibold tabular-nums tracking-wider text-muted-foreground">
+							{formatSMPTETimecode(projection.timelinePlayheadTime * 1000)}
 						</span>
 						<Button
 							variant="ghost"
@@ -466,8 +460,8 @@ export function EditorPreviewPanel(props: Props) {
 						>
 							<SkipForward className="h-3.5 w-3.5" weight="fill" />
 						</Button>
-						<span className="ml-1 text-[10px] font-medium tabular-nums text-muted-foreground/70">
-							{formatTime(projection.timelineDuration)}
+						<span className="ml-1 text-[10px] font-mono font-medium tabular-nums tracking-wider text-muted-foreground/70">
+							{formatSMPTETimecode(projection.timelineDuration * 1000)}
 						</span>
 					</div>
 				</div>

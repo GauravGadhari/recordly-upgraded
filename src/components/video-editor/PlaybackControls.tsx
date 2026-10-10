@@ -1,6 +1,7 @@
 import { Pause, Play, SpeakerHigh as Volume2, SpeakerX as VolumeX } from "@phosphor-icons/react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
+import { formatSMPTETimecode } from "./timeline/core/time";
 import { Button } from "../ui/button";
 
 interface PlaybackControlsProps {
@@ -23,12 +24,6 @@ export default function PlaybackControls({
 	onVolumeChange,
 }: PlaybackControlsProps) {
 	const t = useScopedT("editor");
-	function formatTime(seconds: number) {
-		if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return "0:00";
-		const mins = Math.floor(seconds / 60);
-		const secs = Math.floor(seconds % 60);
-		return `${mins}:${secs.toString().padStart(2, "0")}`;
-	}
 
 	function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
 		onSeek(parseFloat(e.target.value));
@@ -60,8 +55,8 @@ export default function PlaybackControls({
 				)}
 			</Button>
 
-			<span className="text-[9px] font-medium text-muted-foreground tabular-nums w-[30px] text-right">
-				{formatTime(currentTime)}
+			<span className="text-[10px] font-mono font-semibold text-muted-foreground tabular-nums tracking-wider px-1">
+				{formatSMPTETimecode(currentTime * 1000)}
 			</span>
 
 			<div className="flex-1 relative h-6 flex items-center group">
@@ -94,8 +89,8 @@ export default function PlaybackControls({
 				/>
 			</div>
 
-			<span className="text-[9px] font-medium text-muted-foreground tabular-nums w-[30px]">
-				{formatTime(duration)}
+			<span className="text-[10px] font-mono font-medium text-muted-foreground/70 tabular-nums tracking-wider px-1">
+				{formatSMPTETimecode(duration * 1000)}
 			</span>
 
 			<div className="flex items-center gap-1.5 pl-1">

@@ -1,7 +1,8 @@
 import { useTimelineContext } from "dnd-timeline";
 import { useEffect, useState, type RefObject } from "react";
 import { cn } from "@/lib/utils";
-import { formatPlayheadTime } from "../../core/time";
+import { formatSMPTETimecode } from "../../core/time";
+import { TIMELINE_SIDEBAR_WIDTH_PX } from "../../timelineLayout";
 
 interface PlaybackCursorProps {
 	currentTimeMs: number;
@@ -21,6 +22,7 @@ export default function PlaybackCursor({
 	isLoading = false,
 }: PlaybackCursorProps) {
 	const { sidebarWidth, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
+	const effectiveSidebarWidth = sidebarWidth > 0 ? sidebarWidth : TIMELINE_SIDEBAR_WIDTH_PX;
 	const sideProperty = direction === "rtl" ? "right" : "left";
 	const [isDragging, setIsDragging] = useState(false);
 
@@ -30,7 +32,7 @@ export default function PlaybackCursor({
 		const handleMouseMove = (e: MouseEvent) => {
 			if (!timelineRef.current || !onSeek) return;
 			const rect = timelineRef.current.getBoundingClientRect();
-			const clickX = e.clientX - rect.left - sidebarWidth;
+			const clickX = e.clientX - rect.left - effectiveSidebarWidth;
 			const relativeMs = pixelsToValue(clickX);
 			let absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
 
@@ -64,7 +66,7 @@ export default function PlaybackCursor({
 		isDragging,
 		onSeek,
 		timelineRef,
-		sidebarWidth,
+		effectiveSidebarWidth,
 		range.start,
 		range.end,
 		videoDurationMs,
@@ -82,12 +84,12 @@ export default function PlaybackCursor({
 		<div
 			className="absolute top-0 bottom-0 z-50 group/cursor"
 			style={{
-				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px`,
+				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${effectiveSidebarWidth}px`,
 				pointerEvents: "none",
 			}}
 		>
 			<div
-				className="absolute top-0 bottom-0 w-[2px] bg-[#2563EB] shadow-[0_0_10px_rgba(37,99,235,0.5)] cursor-ew-resize pointer-events-auto hover:shadow-[0_0_15px_rgba(37,99,235,0.7)] transition-shadow"
+				className="absolute top-0 bottom-0 w-[2px] -translate-x-1/2 bg-[#2563EB] shadow-[0_0_10px_rgba(37,99,235,0.5)] cursor-ew-resize pointer-events-auto hover:shadow-[0_0_15px_rgba(37,99,235,0.7)] transition-shadow"
 				style={{ [sideProperty]: `${offset}px` }}
 				onMouseDown={(e) => {
 					e.stopPropagation();
@@ -102,12 +104,14 @@ export default function PlaybackCursor({
 				</div>
 				<div
 					className={cn(
-						"absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-foreground/10 shadow-lg pointer-events-none transition-opacity",
-						isDragging || isLoading ? "opacity-100" : "opacity-0",
+						"absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/95 text-[10px] font-mono text-white/95 font-semibold tabular-nums tracking-wider whitespace-nowrap border border-[#2563EB]/40 shadow-xl pointer-events-none transition-all duration-150",
+						isDragging || isLoading
+							? "opacity-100 scale-100"
+							: "opacity-0 group-hover/cursor:opacity-100 scale-95 group-hover/cursor:scale-100",
 					)}
 				>
 					<div className="flex items-center">
-						{formatPlayheadTime(clampedTime)
+						{formatSMPTETimecode(clampedTime)
 							.split("")
 							.map((char, i) => (
 								<span

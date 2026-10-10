@@ -114,3 +114,28 @@ export function formatPlayheadTime(ms: number): string {
 	if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, "0")}`;
 	return `${sec.toFixed(1)}s`;
 }
+
+/**
+ * Formats milliseconds into standard SMPTE timecode: HH:MM:SS:FF
+ * @param ms Time in milliseconds
+ * @param fps Frames per second (default: 30)
+ * @returns Timecode string formatted as "00:00:00:00"
+ */
+export function formatSMPTETimecode(ms: number, fps = 30): string {
+	if (!Number.isFinite(ms) || ms < 0) return "00:00:00:00";
+	const totalMs = Math.max(0, Math.round(ms));
+	const totalSeconds = Math.floor(totalMs / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	const remainingMs = totalMs % 1000;
+	const safeFps = fps > 0 ? fps : 30;
+	const frames = Math.min(safeFps - 1, Math.floor((remainingMs / 1000) * safeFps));
+
+	const hh = hours.toString().padStart(2, "0");
+	const mm = minutes.toString().padStart(2, "0");
+	const ss = seconds.toString().padStart(2, "0");
+	const ff = frames.toString().padStart(2, "0");
+
+	return `${hh}:${mm}:${ss}:${ff}`;
+}

@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { type MouseEvent, useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { formatSMPTETimecode } from "../../core/time";
 
 interface TimelineScrollbarProps {
 	totalMs: number;
@@ -204,7 +205,7 @@ export default function TimelineScrollbar({
 				<div
 					className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-1.5 h-3.5 bg-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.9)] pointer-events-none z-20 transition-[left] duration-75"
 					style={{ left: `${playheadPercent}%` }}
-					title={`Playhead: ${(currentTimeMs / 1000).toFixed(1)}s`}
+					title={`Playhead: ${formatSMPTETimecode(currentTimeMs)}`}
 				/>
 
 				{/* Draggable Thumb (Visible Window) */}

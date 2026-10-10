@@ -1,6 +1,7 @@
 export const TIMELINE_AXIS_HEIGHT_PX = 32;
 export const TIMELINE_ROW_MIN_HEIGHT_PX = 36;
 export const TIMELINE_VISIBLE_ROW_COUNT = 2;
+export const TIMELINE_SIDEBAR_WIDTH_PX = 144;
 
 function normalizeRowCount(rowCount: number) {
 	if (!Number.isFinite(rowCount)) {
