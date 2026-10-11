@@ -1,5 +1,4 @@
 import type { AudioRegion, CursorTelemetryPoint, KeystrokeEvent, ZoomRegion } from "../types";
-import { detectInteractionCandidates } from "./zoomSuggestionUtils";
 import {
 	type ProceduralKeystrokeStyle,
 	type ScrollSfxStyle,
@@ -177,8 +176,8 @@ export function detectKinematicMicroDwells(
 
 /**
  * Detects distinct click timestamps from cursor telemetry.
- * Combines explicit interaction samples, isolated mouseup events, heuristic candidates,
- * and kinematic micro-dwells, merging without dropping valid clicks.
+ * Strictly uses certified OS/evdev click events and isolated non-drag mouseup
+ * events so hovering or moving the cursor never hallucinates phantom clicks.
  */
 export function detectCursorClicks(
 	samples: CursorTelemetryPoint[],
@@ -188,80 +187,58 @@ export function detectCursorClicks(
 
 	const sortedSamples = [...samples].sort((a, b) => a.timeMs - b.timeMs);
 	const explicitTimestamps: number[] = [];
-	const candidateTimestamps: number[] = [];
 
 	// 1. Explicit interaction clicks from uiohook / evdev
 	for (const sample of sortedSamples) {
 		const type = sample.interactionType;
+		const time = Math.round(sample.timeMs);
 		if (
 			type === "click" ||
 			type === "right-click" ||
 			type === "middle-click"
 		) {
-			explicitTimestamps.push(Math.round(sample.timeMs));
+			explicitTimestamps.push(time);
 		} else if (type === "double-click") {
-			explicitTimestamps.push(Math.round(sample.timeMs));
-			explicitTimestamps.push(Math.round(sample.timeMs + 130));
+			// If the first click of this double-click was already recorded within 350ms,
+			// this sample represents the second click; otherwise emit both clicks.
+			const hasFirstClick = explicitTimestamps.some(
+				(t) => time - t >= 50 && time - t <= 350,
+			);
+			explicitTimestamps.push(time);
+			if (!hasFirstClick) {
+				explicitTimestamps.push(time + 130);
+			}
 		}
 	}
 
-	// 1b. Standalone mouseup events (when mousedown was dropped or lost)
+	// 1b. Standalone mouseup events (when mousedown was dropped, excluding drag releases)
+	const dragSpans = detectCursorDrags(sortedSamples);
 	for (let i = 0; i < sortedSamples.length; i++) {
 		const sample = sortedSamples[i];
 		if (sample.interactionType === "mouseup") {
 			const time = Math.round(sample.timeMs);
+			const isDragRelease = dragSpans.some((d) => {
+				if (Math.abs(d.endMs - time) > 60) return false;
+				return sortedSamples.some(
+					(s) =>
+						s.timeMs > d.startMs &&
+						s.timeMs < d.endMs &&
+						(s.interactionType === "move" ||
+							!s.interactionType ||
+							s.cursorType === "closed-hand"),
+				);
+			});
 			const hasNearbyClick = explicitTimestamps.some(
 				(t) => Math.abs(t - time) <= 350,
 			);
-			if (!hasNearbyClick) {
+			if (!isDragRelease && !hasNearbyClick) {
 				explicitTimestamps.push(time);
 			}
 		}
 	}
 
-	// Helper to check if a timestamp is near any confirmed explicit click
-	const isNearExplicit = (time: number, windowMs = 200) =>
-		explicitTimestamps.some((t) => Math.abs(t - time) <= windowMs);
-
-	// 2. High-confidence kinematic pointer clicks (user moved to button/link with 'pointer' cursor and clicked)
-	for (let i = 1; i < sortedSamples.length; i++) {
-		const curr = sortedSamples[i];
-		if (curr.cursorType === "pointer") {
-			const time = Math.round(curr.timeMs);
-			if (!isNearExplicit(time, 240) && !candidateTimestamps.some((t) => Math.abs(t - time) <= 240)) {
-				const prev = sortedSamples[i - 1];
-				const dt = curr.timeMs - prev.timeMs;
-				const dist = Math.hypot(curr.cx - prev.cx, curr.cy - prev.cy);
-				if (dt >= 40 && dt <= 250 && dist < 0.01) {
-					candidateTimestamps.push(time);
-				}
-			}
-		}
-	}
-
-	// 3. Fallback heuristic candidates ONLY when no explicit clicks were captured anywhere
-	if (explicitTimestamps.length === 0) {
-		const candidates = detectInteractionCandidates(sortedSamples);
-		for (const cand of candidates) {
-			if (
-				cand.kind === "click-like" ||
-				cand.kind === "text-field-click" ||
-				cand.kind === "dropdown-open"
-			) {
-				const time = Math.round(cand.centerTimeMs);
-				if (!candidateTimestamps.some((t) => Math.abs(t - time) <= 180)) {
-					candidateTimestamps.push(time);
-				}
-			} else if (cand.kind === "double-click-like") {
-				const time = Math.round(cand.centerTimeMs);
-				candidateTimestamps.push(time);
-				candidateTimestamps.push(time + 130);
-			}
-		}
-	}
-
-	// 4. Combine all sources, sort & de-duplicate with minGapMs (120ms preserves double-clicks at 130ms)
-	const all = [...explicitTimestamps, ...candidateTimestamps].sort((a, b) => a - b);
+	// 2. Sort & de-duplicate with minGapMs (120ms preserves double-clicks at 130ms)
+	const all = [...explicitTimestamps].sort((a, b) => a - b);
 	const deduplicated: number[] = [];
 	for (const ts of all) {
 		if (

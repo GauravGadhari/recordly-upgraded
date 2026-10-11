@@ -40,7 +40,7 @@ describe("sfxSuggestionUtils", () => {
 		expect(clicks).toEqual([100, 500, 1000, 1130]);
 	});
 
-	it("recovers missed clicks from standalone mouseup and kinematic pauses even when explicit clicks exist", () => {
+	it("recovers standalone mouseup clicks but does not hallucinate clicks on pointer hovers or pauses", () => {
 		const samples: CursorTelemetryPoint[] = [
 			// 1. One explicit click
 			{ timeMs: 200, cx: 0.2, cy: 0.2, interactionType: "click" },
@@ -48,7 +48,7 @@ describe("sfxSuggestionUtils", () => {
 			// 2. A missed click where only mouseup was captured
 			{ timeMs: 800, cx: 0.5, cy: 0.5, interactionType: "mouseup" },
 
-			// 3. A missed click where the cursor moved rapidly to a link, paused briefly (pointer), and moved away
+			// 3. Cursor moves to a link, hovers briefly (pointer) without clicking, and moves away
 			{ timeMs: 1400, cx: 0.1, cy: 0.1 },
 			{ timeMs: 1450, cx: 0.4, cy: 0.4 },
 			{ timeMs: 1500, cx: 0.6, cy: 0.6, cursorType: "pointer" },
@@ -58,10 +58,7 @@ describe("sfxSuggestionUtils", () => {
 		];
 
 		const clicks = detectCursorClicks(samples);
-		expect(clicks).toContain(200);
-		expect(clicks).toContain(800);
-		// The kinematic pointer click around 1500-1550ms should be recovered
-		expect(clicks.some((t) => t >= 1500 && t <= 1650)).toBe(true);
+		expect(clicks).toEqual([200, 800]);
 	});
 
 	it("detects drag gestures from click + movement + mouseup", () => {

@@ -17,6 +17,8 @@
 #include <spawn.h>
 #include <sys/wait.h>
 #include <csignal>
+#include <cmath>
+#include <algorithm>
 #include <libevdev/libevdev.h>
 #include <linux/input-event-codes.h>
 
@@ -277,9 +279,38 @@ static void evdev_thread_func() {
                         g_has_activity.store(true);
                         g_last_activity_ms.store(now_ms());
 
-                        if (ev.type == EV_REL || ev.type == EV_ABS) {
-                            // Emit scroll wheel events
+                        // Touchpad contact state for accurate tap-vs-move discrimination
+                        static bool s_touch_down = false;
+                        static bool s_touch_moved = false;
+                        static bool s_touch_phys_btn = false;
+                        static int s_active_fingers = 1;
+                        static int s_max_fingers_during_touch = 1;
+                        static int s_cur_mt_slot = 0;
+                        static int s_cur_abs_x = 0;
+                        static int s_cur_abs_y = 0;
+                        static int s_touch_start_abs_x = 0;
+                        static int s_touch_start_abs_y = 0;
+                        static int s_last_scroll_abs_y = 0;
+                        static bool s_has_touch_start_x = false;
+                        static bool s_has_touch_start_y = false;
+                        static bool s_frame_has_x = false;
+                        static bool s_frame_has_y = false;
+                        static double s_touch_start_screen_x = -1.0;
+                        static double s_touch_start_screen_y = -1.0;
+                        static int64_t s_last_touch_down_ms = 0;
+                        static int64_t s_last_touch_up_ms = 0;
+                        static bool s_last_was_valid_tap = false;
+                        static bool s_is_tap_drag = false;
+
+                        if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
+                            s_frame_has_x = false;
+                            s_frame_has_y = false;
+                        } else if (ev.type == EV_REL || ev.type == EV_ABS) {
                             if (ev.type == EV_REL) {
+                                if (ev.value != 0 && s_touch_down) {
+                                    s_touch_moved = true;
+                                }
+                                // Emit scroll wheel events
                                 if (ev.code == REL_WHEEL || ev.code == REL_WHEEL_HI_RES) {
                                     int delta = ev.value;
                                     // REL_WHEEL_HI_RES reports 120 units per notch
@@ -300,6 +331,63 @@ static void evdev_thread_func() {
                                         std::cout.flush();
                                     }
                                 }
+                            } else if (ev.type == EV_ABS) {
+                                if (ev.code == ABS_MT_SLOT) {
+                                    s_cur_mt_slot = ev.value;
+                                    if (s_touch_down && ev.value >= 1) {
+                                        s_max_fingers_during_touch = std::max(s_max_fingers_during_touch, ev.value + 1);
+                                    }
+                                } else if (ev.code == ABS_X || (ev.code == ABS_MT_POSITION_X && s_cur_mt_slot == 0)) {
+                                    s_cur_abs_x = ev.value;
+                                    s_frame_has_x = true;
+                                    if (s_touch_down) {
+                                        if (!s_has_touch_start_x) {
+                                            s_touch_start_abs_x = ev.value;
+                                            s_has_touch_start_x = true;
+                                        } else {
+                                            int res = libevdev_get_abs_resolution(devices[i].dev, ABS_X);
+                                            int range = libevdev_get_abs_maximum(devices[i].dev, ABS_X) - libevdev_get_abs_minimum(devices[i].dev, ABS_X);
+                                            int thresh = (res > 0)
+                                                ? std::max(12, static_cast<int>(res * 1.2))
+                                                : (range > 0 ? std::max(15, range / 85) : 35);
+                                            if (std::abs(ev.value - s_touch_start_abs_x) > thresh) {
+                                                s_touch_moved = true;
+                                            }
+                                        }
+                                    }
+                                } else if (ev.code == ABS_Y || (ev.code == ABS_MT_POSITION_Y && s_cur_mt_slot == 0)) {
+                                    s_cur_abs_y = ev.value;
+                                    s_frame_has_y = true;
+                                    if (s_touch_down) {
+                                        if (!s_has_touch_start_y) {
+                                            s_touch_start_abs_y = ev.value;
+                                            s_last_scroll_abs_y = ev.value;
+                                            s_has_touch_start_y = true;
+                                        } else {
+                                            int res = libevdev_get_abs_resolution(devices[i].dev, ABS_Y);
+                                            int range = libevdev_get_abs_maximum(devices[i].dev, ABS_Y) - libevdev_get_abs_minimum(devices[i].dev, ABS_Y);
+                                            int thresh = (res > 0)
+                                                ? std::max(12, static_cast<int>(res * 1.2))
+                                                : (range > 0 ? std::max(15, range / 85) : 35);
+                                            if (std::abs(ev.value - s_touch_start_abs_y) > thresh) {
+                                                s_touch_moved = true;
+                                            }
+                                            // Two-finger touchpad scroll detection on native Wayland
+                                            if (s_active_fingers == 2 && !s_touch_phys_btn) {
+                                                int scroll_step = (res > 0)
+                                                    ? std::max(40, res * 4)
+                                                    : (range > 0 ? std::max(50, range / 18) : 120);
+                                                int dy = ev.value - s_last_scroll_abs_y;
+                                                if (std::abs(dy) >= scroll_step) {
+                                                    int delta = (dy > 0) ? -1 : 1;
+                                                    s_last_scroll_abs_y = ev.value;
+                                                    std::cout << "INTERACTION:scroll:vertical:" << delta << "\n";
+                                                    std::cout.flush();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         } else if (ev.type == EV_KEY) {
                             if (ev.code < 0x100) {
@@ -318,45 +406,95 @@ static void evdev_thread_func() {
                                 g_typing_origin_y.store(g_last_y.load());
                             }
 
-                            // Handle touchpad tap-to-drag gesture
-                            static int64_t s_last_touch_down_ms = 0;
-                            static int64_t s_last_touch_up_ms = 0;
-                            static bool s_is_tap_drag = false;
+                            // Track touchpad multi-finger tool indicators
+                            if (ev.code == BTN_TOOL_FINGER && ev.value == 1) {
+                                s_active_fingers = 1;
+                            } else if (ev.code == BTN_TOOL_DOUBLETAP) {
+                                if (ev.value == 1) {
+                                    s_active_fingers = 2;
+                                    if (s_touch_down) {
+                                        s_max_fingers_during_touch = std::max(s_max_fingers_during_touch, 2);
+                                        s_last_scroll_abs_y = s_cur_abs_y;
+                                    }
+                                } else if (ev.value == 0 && s_active_fingers == 2) {
+                                    s_active_fingers = 1;
+                                }
+                            } else if (ev.code == BTN_TOOL_TRIPLETAP) {
+                                if (ev.value == 1) {
+                                    s_active_fingers = 3;
+                                    if (s_touch_down) s_max_fingers_during_touch = std::max(s_max_fingers_during_touch, 3);
+                                } else if (ev.value == 0 && s_active_fingers == 3) {
+                                    s_active_fingers = 1;
+                                }
+                            } else if (ev.code == BTN_TOOL_QUADTAP || ev.code == BTN_TOOL_QUINTTAP) {
+                                if (ev.value == 1) {
+                                    s_active_fingers = 4;
+                                    if (s_touch_down) s_max_fingers_during_touch = std::max(s_max_fingers_during_touch, 4);
+                                } else if (ev.value == 0) {
+                                    s_active_fingers = 1;
+                                }
+                            }
 
                             if (ev.code == BTN_TOUCH) {
                                 int64_t now = now_ms();
                                 if (ev.value == 1) {
-                                    int64_t tap_duration = s_last_touch_up_ms - s_last_touch_down_ms;
+                                    s_touch_down = true;
+                                    s_touch_moved = false;
+                                    s_touch_phys_btn = g_is_left_down.load();
+                                    s_max_fingers_during_touch = std::max(1, s_active_fingers);
+                                    s_has_touch_start_x = s_frame_has_x;
+                                    if (s_frame_has_x) s_touch_start_abs_x = s_cur_abs_x;
+                                    s_has_touch_start_y = s_frame_has_y;
+                                    if (s_frame_has_y) {
+                                        s_touch_start_abs_y = s_cur_abs_y;
+                                        s_last_scroll_abs_y = s_cur_abs_y;
+                                    }
+                                    s_touch_start_screen_x = g_last_x.load();
+                                    s_touch_start_screen_y = g_last_y.load();
+
                                     int64_t tap_gap = now - s_last_touch_up_ms;
-                                    if (tap_duration > 15 && tap_duration < 320 && tap_gap < 350) {
+                                    if (s_last_was_valid_tap && tap_gap < 250) {
                                         s_is_tap_drag = true;
                                         g_is_left_down.store(true);
-                                        g_drag_start_x.store(g_last_x.load());
-                                        g_drag_start_y.store(g_last_y.load());
+                                        g_drag_start_x.store(s_touch_start_screen_x);
+                                        g_drag_start_y.store(s_touch_start_screen_y);
                                         g_is_dragging.store(false);
-                                        std::cout << "INTERACTION:mousedown:1\n";
-                                        std::cout.flush();
                                     } else {
                                         s_is_tap_drag = false;
                                     }
                                     s_last_touch_down_ms = now;
                                 } else if (ev.value == 0) {
+                                    s_touch_down = false;
                                     int64_t tap_duration = now - s_last_touch_down_ms;
                                     s_last_touch_up_ms = now;
+
+                                    double cur_x = g_last_x.load();
+                                    double cur_y = g_last_y.load();
+                                    if (s_touch_start_screen_x >= 0 && cur_x >= 0 &&
+                                        std::hypot(cur_x - s_touch_start_screen_x, cur_y - s_touch_start_screen_y) > 1.5) {
+                                        s_touch_moved = true;
+                                    }
+
                                     if (s_is_tap_drag) {
                                         s_is_tap_drag = false;
                                         g_is_left_down.store(false);
                                         g_is_dragging.store(false);
-                                        std::cout << "INTERACTION:mouseup\n";
-                                        std::cout.flush();
-                                    } else if (tap_duration >= 15 && tap_duration <= 350) {
-                                        // Standard touchpad tap click
-                                        double x = g_last_x.load();
-                                        double y = g_last_y.load();
-                                        if (x >= 0 && y >= 0) {
-                                            std::cout << "POSITION:" << x << ":" << y << "\n";
+                                    }
+
+                                    bool is_valid_tap =
+                                        !s_touch_moved &&
+                                        !s_touch_phys_btn &&
+                                        (tap_duration >= 15 && tap_duration <= 175) &&
+                                        (s_max_fingers_during_touch == 1 || s_max_fingers_during_touch == 2);
+
+                                    s_last_was_valid_tap = is_valid_tap && (s_max_fingers_during_touch == 1);
+
+                                    if (is_valid_tap) {
+                                        int tap_btn = (s_max_fingers_during_touch == 2) ? 2 : 1;
+                                        if (cur_x >= 0 && cur_y >= 0) {
+                                            std::cout << "POSITION:" << cur_x << ":" << cur_y << "\n";
                                         }
-                                        std::cout << "INTERACTION:mousedown:1\n";
+                                        std::cout << "INTERACTION:mousedown:" << tap_btn << "\n";
                                         std::cout << "INTERACTION:mouseup\n";
                                         std::cout.flush();
                                     }
@@ -370,6 +508,8 @@ static void evdev_thread_func() {
                             else if (ev.code == BTN_SIDE || ev.code == BTN_EXTRA || ev.code == BTN_FORWARD || ev.code == BTN_BACK) btn = 1;
 
                             if (btn > 0) {
+                                s_touch_phys_btn = true;
+                                s_last_was_valid_tap = false;
                                 if (btn == 1) {
                                     if (ev.value == 1) {
                                         g_is_left_down.store(true);

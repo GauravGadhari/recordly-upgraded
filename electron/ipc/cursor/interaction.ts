@@ -52,6 +52,9 @@ export function getHookMouseButton(event: HookMouseEvent | null | undefined): 1 
 }
 
 export function stopInteractionCapture() {
+	lastMouseDownMeta = null;
+	lastMouseUpTimeMs = null;
+	lastScrollTimeMs = null;
 	if (interactionCaptureCleanup) {
 		interactionCaptureCleanup();
 		setInteractionCaptureCleanup(null);
@@ -189,6 +192,10 @@ export function shouldStartGlobalInteractionHook(platform: NodeJS.Platform = pro
 	return platform !== "darwin";
 }
 
+let lastMouseDownMeta: { timeMs: number; button: 1 | 2 | 3 } | null = null;
+let lastMouseUpTimeMs: number | null = null;
+let lastScrollTimeMs: number | null = null;
+
 export function recordCursorMouseDown(button: 1 | 2 | 3) {
 	if (!isCursorCaptureActive || isCursorCapturePaused()) {
 		return;
@@ -200,6 +207,18 @@ export function recordCursorMouseDown(button: 1 | 2 | 3) {
 	}
 
 	const timeMs = getCursorCaptureElapsedMs();
+
+	// Deduplicate dual-hook (uiohook + linux-evdev) events arriving for the same physical click
+	if (
+		lastMouseDownMeta &&
+		lastMouseDownMeta.button === button &&
+		timeMs >= lastMouseDownMeta.timeMs &&
+		timeMs - lastMouseDownMeta.timeMs < 65
+	) {
+		return;
+	}
+	lastMouseDownMeta = { timeMs, button };
+
 	let interactionType: CursorInteractionType = "click";
 
 	if (button === 2) {
@@ -207,12 +226,18 @@ export function recordCursorMouseDown(button: 1 | 2 | 3) {
 	} else if (button === 3) {
 		interactionType = "middle-click";
 	} else {
+		const minDoubleClickMs = 65;
 		const thresholdMs = 350;
 		const distance = lastLeftClick
 			? Math.hypot(point.cx - lastLeftClick.cx, point.cy - lastLeftClick.cy)
 			: Number.POSITIVE_INFINITY;
 
-		if (lastLeftClick && timeMs - lastLeftClick.timeMs <= thresholdMs && distance <= 0.04) {
+		if (
+			lastLeftClick &&
+			timeMs - lastLeftClick.timeMs >= minDoubleClickMs &&
+			timeMs - lastLeftClick.timeMs <= thresholdMs &&
+			distance <= 0.04
+		) {
 			interactionType = "double-click";
 		}
 
@@ -232,7 +257,13 @@ export function recordCursorMouseUp() {
 		return;
 	}
 
-	pushCursorSample(point.cx, point.cy, getCursorCaptureElapsedMs(), "mouseup");
+	const timeMs = getCursorCaptureElapsedMs();
+	if (lastMouseUpTimeMs !== null && timeMs >= lastMouseUpTimeMs && timeMs - lastMouseUpTimeMs < 65) {
+		return;
+	}
+	lastMouseUpTimeMs = timeMs;
+
+	pushCursorSample(point.cx, point.cy, timeMs, "mouseup");
 }
 
 export function recordCursorScroll(event: {
@@ -250,6 +281,12 @@ export function recordCursorScroll(event: {
 		return;
 	}
 
+	const timeMs = getCursorCaptureElapsedMs();
+	if (lastScrollTimeMs !== null && timeMs >= lastScrollTimeMs && timeMs - lastScrollTimeMs < 25) {
+		return;
+	}
+	lastScrollTimeMs = timeMs;
+
 	const rotation = event.rotation ?? event.data?.rotation ?? 0;
 	const amount = event.amount ?? event.data?.amount ?? 1;
 
@@ -258,7 +295,7 @@ export function recordCursorScroll(event: {
 	const rawDelta = rotation * Math.min(3, Math.abs(amount));
 	const normalizedDelta = Math.max(-1, Math.min(1, rawDelta / 3));
 
-	pushCursorSample(point.cx, point.cy, getCursorCaptureElapsedMs(), "scroll", undefined, normalizedDelta);
+	pushCursorSample(point.cx, point.cy, timeMs, "scroll", undefined, normalizedDelta);
 }
 
 
