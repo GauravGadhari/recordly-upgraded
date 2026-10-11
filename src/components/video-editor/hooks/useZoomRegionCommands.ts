@@ -3,6 +3,7 @@ import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback 
 import {
 	clampFocusToDepth,
 	DEFAULT_AUTO_ZOOM_DEPTH,
+	DEFAULT_ZOOM_DEPTH,
 	type EditorEffectSection,
 	type ZoomDepth,
 	type ZoomFocus,
@@ -11,6 +12,7 @@ import {
 } from "../types";
 
 interface UseZoomRegionCommandsParams {
+	setSelectedClipId: Dispatch<SetStateAction<string | null>>;
 	videoPath: string | null;
 	setZoomRegions: Dispatch<SetStateAction<ZoomRegion[]>>;
 	selectedZoomId: string | null;
@@ -28,6 +30,7 @@ interface UseZoomRegionCommandsParams {
 }
 
 export function useZoomRegionCommands({
+	setSelectedClipId,
 	videoPath,
 	setZoomRegions,
 	selectedZoomId,
@@ -50,6 +53,7 @@ export function useZoomRegionCommands({
 				setActiveEffectSection("zoom");
 				setSelectedZoomOutId?.(null);
 				setSelectedAnnotationId(null);
+				setSelectedClipId(null);
 				setSelectedAudioId(null);
 				setSelectedCaptionId(null);
 				setSelectedTransitionId?.(null);
@@ -61,6 +65,7 @@ export function useZoomRegionCommands({
 		[
 			setActiveEffectSection,
 			setSelectedAnnotationId,
+			setSelectedClipId,
 			setSelectedAudioId,
 			setSelectedCaptionId,
 			setSelectedTransitionId,
@@ -80,7 +85,7 @@ export function useZoomRegionCommands({
 	const handleZoomAdded = useCallback(
 		(span: Span) => {
 			const id = `zoom-${nextZoomIdRef.current++}`;
-			const depth: ZoomDepth = 2;
+			const depth = DEFAULT_ZOOM_DEPTH;
 			const newRegion: ZoomRegion = {
 				id,
 				startMs: Math.round(span.start),
@@ -94,12 +99,14 @@ export function useZoomRegionCommands({
 			setZoomRegions((current) => [...current, newRegion]);
 			setSelectedZoomId(id);
 			setSelectedAnnotationId(null);
+			setSelectedClipId(null);
 			setSelectedCaptionId(null);
 		},
 		[
 			markFreshRecordingSuggestion,
 			nextZoomIdRef,
 			setSelectedAnnotationId,
+			setSelectedClipId,
 			setSelectedCaptionId,
 			setSelectedZoomId,
 			setZoomRegions,

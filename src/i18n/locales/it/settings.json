@@ -19,7 +19,8 @@
 	},
 	"clip": {
 		"title": "Clip",
-		"mute": "Disattiva audio",
+		"mute": "Disattiva l'audio del clip",
+		"resetAudioSettings": "Ripristina impostazioni audio",
 		"mutedState": "Audio disattivato",
 		"unmutedState": "Audio in riproduzione",
 		"separateClipFromAudio": "Separa clip dall'audio",

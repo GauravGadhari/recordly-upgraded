@@ -5,9 +5,19 @@ export type ProjectLibraryEntry = {
 	path: string;
 	name: string;
 	updatedAt: number;
+	createdAt?: number;
 	thumbnailPath: string | null;
 	isCurrent: boolean;
 	isInProjectsDirectory: boolean;
+	rawSource?: {
+		name: string;
+		url: string;
+		path: string;
+		bytes: number;
+		sizeBytes?: number;
+		createdAt: number;
+		updatedAt?: number;
+	} | null;
 };
 
 type ProjectBrowserDialogProps = {

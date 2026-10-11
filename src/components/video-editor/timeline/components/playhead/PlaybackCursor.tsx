@@ -8,7 +8,7 @@ interface PlaybackCursorProps {
 	currentTimeMs: number;
 	videoDurationMs: number;
 	onSeek?: (time: number) => void;
-	timelineRef: RefObject<HTMLDivElement>;
+	timelineRef: RefObject<HTMLDivElement | null>;
 	keyframes?: { id: string; time: number }[];
 	isLoading?: boolean;
 }

@@ -1,5 +1,7 @@
+import { Card } from "@heroui/react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useI18n } from "./contexts/I18nContext";
+import { EditorLoadingSkeleton } from "./components/video-editor/layout/EditorLoadingSkeleton";
 
 const HudWindow = lazy(() => import("./components/launch/HudWindow"));
 const SourceSelector = lazy(() =>
@@ -79,7 +81,7 @@ export default function App() {
 		default:
 			content = (
 				<div className="flex h-full w-full items-center justify-center bg-editor-bg text-foreground">
-					<div className="flex items-center gap-4 rounded-2xl border border-foreground/10 bg-foreground/5 px-6 py-5 shadow-2xl shadow-black/30 backdrop-blur-xl">
+					<Card className="flex-row items-center gap-4 px-6 py-5">
 						<img
 							src={appIconSrc}
 							alt={t("app.name", "Recordly")}
@@ -93,10 +95,14 @@ export default function App() {
 								{t("app.subtitle", "Screen recording and editing")}
 							</p>
 						</div>
-					</div>
+					</Card>
 				</div>
 			);
 	}
 
-	return <Suspense fallback={null}>{content}</Suspense>;
+	return (
+		<Suspense fallback={windowType === "editor" ? <EditorLoadingSkeleton /> : null}>
+			{content}
+		</Suspense>
+	);
 }

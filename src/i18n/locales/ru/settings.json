@@ -19,7 +19,8 @@
 	},
 	"clip": {
 		"title": "Клип",
-		"mute": "Без звука",
+		"mute": "Отключить звук клипа",
+		"resetAudioSettings": "Сбросить настройки звука",
 		"mutedState": "Звук выключен",
 		"unmutedState": "Звук включен",
 		"separateClipFromAudio": "Отделить аудио от клипа",

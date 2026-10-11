@@ -25,7 +25,8 @@
 	},
 	"clip": {
 		"title": "Clip",
-		"mute": "Mute",
+		"mute": "Mute clip",
+		"resetAudioSettings": "Reset audio settings",
 		"mutedState": "Audio is muted",
 		"unmutedState": "Audio is playing",
 		"separateClipFromAudio": "Separate clip from audio",

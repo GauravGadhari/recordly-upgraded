@@ -13,6 +13,7 @@ import {
 } from "../types";
 
 interface UseAnnotationRegionCommandsParams {
+	onSelectAnnotation: (id: string | null) => void;
 	setAnnotationRegions: Dispatch<SetStateAction<AnnotationRegion[]>>;
 	selectedAnnotationId: string | null;
 	setSelectedAnnotationId: Dispatch<SetStateAction<string | null>>;
@@ -22,6 +23,7 @@ interface UseAnnotationRegionCommandsParams {
 }
 
 export function useAnnotationRegionCommands({
+	onSelectAnnotation,
 	setAnnotationRegions,
 	selectedAnnotationId,
 	setSelectedAnnotationId,
@@ -48,14 +50,14 @@ export function useAnnotationRegionCommands({
 					: {}),
 			};
 			setAnnotationRegions((current) => [...current, newRegion]);
-			setSelectedAnnotationId(id);
+			onSelectAnnotation(id);
 			setSelectedZoomId(null);
 		},
 		[
+			onSelectAnnotation,
 			nextAnnotationIdRef,
 			nextAnnotationZIndexRef,
 			setAnnotationRegions,
-			setSelectedAnnotationId,
 			setSelectedZoomId,
 		],
 	);

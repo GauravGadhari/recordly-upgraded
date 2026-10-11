@@ -25,7 +25,7 @@ interface EditorDialogsProps {
 	setProjectSaveDialogOpen: Dispatch<SetStateAction<boolean>>;
 	projectSaveDialogDraft: string;
 	setProjectSaveDialogDraft: Dispatch<SetStateAction<string>>;
-	projectSaveDialogInputRef: RefObject<HTMLInputElement>;
+	projectSaveDialogInputRef: RefObject<HTMLInputElement | null>;
 	isSavingProjectDialog: boolean;
 	resolveProjectSaveDialog: (saved: boolean) => void;
 	handleProjectSaveDialogSubmit: (event?: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -36,9 +36,9 @@ interface EditorDialogsProps {
 	projectBrowserOpen: boolean;
 	setProjectBrowserOpen: Dispatch<SetStateAction<boolean>>;
 	projectLibraryEntries: ProjectLibraryEntry[];
-	projectBrowserAnchorRef: RefObject<HTMLButtonElement>;
+	projectBrowserAnchorRef: RefObject<HTMLButtonElement | null>;
 	handleImportMediaOrProject: () => Promise<void>;
-	handleOpenProjectFromLibrary: (projectPath: string) => Promise<void>;
+	handleOpenProjectFromLibrary: (projectPath: string) => Promise<unknown>;
 	nativeCaptureUnavailableModalOpen: boolean;
 	setNativeCaptureUnavailableModalOpen: Dispatch<SetStateAction<boolean>>;
 }

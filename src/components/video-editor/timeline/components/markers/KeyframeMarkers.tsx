@@ -13,7 +13,7 @@ interface KeyframeMarkersProps {
 	setSelectedKeyframeId: (id: string | null) => void;
 	onKeyframeMove: (id: string, newTime: number) => void;
 	videoDurationMs: number;
-	timelineRef: React.RefObject<HTMLDivElement>;
+	timelineRef: React.RefObject<HTMLDivElement | null>;
 }
 
 const KeyframeMarkers: React.FC<KeyframeMarkersProps> = ({

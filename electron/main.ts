@@ -1,3 +1,5 @@
+import { createSaveBeforeCloseController } from "./saveBeforeClose";
+import { clearRecordingTrashUndo } from "./ipc/recording/library";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -16,6 +18,7 @@ import {
 	Tray,
 } from "electron";
 import { RECORDINGS_DIR } from "./appPaths";
+import { createAuthCallbackController } from "./authCallback";
 import { showCursor } from "./cursorHider";
 import { getGpuSwitches } from "./gpuSwitches";
 import {
@@ -53,7 +56,7 @@ import {
 	getUpdateToastWindow,
 	hideUpdateToastWindow,
 	isHudOverlayMousePassthroughSupported,
-	reassertHudOverlayCaptureProtection,
+	beginHudCaptureProtection,
 	reassertHudOverlayMousePassthrough as reassertHudOverlayMouseState,
 	setHudOverlayRecordingActive,
 	showUpdateToastWindow,
@@ -188,6 +191,11 @@ const hasSingleInstanceLock = shouldEnforceSingleInstanceLock
 if (!hasSingleInstanceLock) {
 	app.quit();
 }
+
+const authCallbacks = createAuthCallbackController({
+	isDev: IS_DEV,
+	focusApp: () => focusOrCreateMainWindow(),
+});
 
 function closeEditorWindowBypassingUnsavedPrompt(window: BrowserWindow | null) {
 	if (!window || window.isDestroyed()) {
@@ -421,10 +429,13 @@ function sendEditorMenuAction(
 		targetWindow = mainWindow;
 		if (!targetWindow || targetWindow.isDestroyed()) return;
 
-		targetWindow.webContents.once("did-finish-load", () => {
+		const send = () => {
 			if (!targetWindow || targetWindow.isDestroyed()) return;
 			targetWindow.webContents.send(channel);
-		});
+		};
+		if (targetWindow.webContents.isLoadingMainFrame())
+			targetWindow.webContents.once("did-finish-load", send);
+		else send();
 		return;
 	}
 
@@ -804,6 +815,39 @@ function createEditorWindowWrapper() {
 		editorHasUnsavedChanges = false;
 	});
 
+	const closeAfterSave = () => {
+		if (process.platform === "win32" && !isAppQuitting) closeEditorWindowToHud(editorWindow);
+		else closeEditorWindowBypassingUnsavedPrompt(editorWindow);
+	};
+	let closeSaveRequestId = 0;
+	const closeSave = createSaveBeforeCloseController({
+		requestSave: () =>
+			editorWindow.webContents.send("request-save-before-close", ++closeSaveRequestId),
+		subscribe: (done) => {
+			const saved = (event: Electron.IpcMainEvent, success: unknown, requestId: unknown) => {
+				if (event.sender === editorWindow.webContents && requestId === closeSaveRequestId)
+					done(success === true);
+			};
+			ipcMain.on("save-before-close-done", saved);
+			return () => ipcMain.removeListener("save-before-close-done", saved);
+		},
+		offerDiscard: async () => {
+			const result = await dialog.showMessageBox(editorWindow, {
+				type: "warning",
+				buttons: ["Discard & Close", "Cancel"],
+				defaultId: 1,
+				cancelId: 1,
+				title: "Project could not be saved",
+				message: "Saving failed or did not respond. Discard unsaved changes and close?",
+			});
+			return result.response === 0;
+		},
+		close: closeAfterSave,
+		cancel: () => {
+			isAppQuitting = false;
+		},
+	});
+	editorWindow.once("closed", closeSave.dispose);
 	editorWindow.on("close", (event) => {
 		if (isForceClosing || !editorHasUnsavedChanges) {
 			if (process.platform === "win32" && !isForceClosing && !isAppQuitting) {
@@ -812,42 +856,8 @@ function createEditorWindowWrapper() {
 			}
 			return;
 		}
-
 		event.preventDefault();
-
-		const choice = dialog.showMessageBoxSync(editorWindow, {
-			type: "warning",
-			buttons: ["Save & Close", "Discard & Close", "Cancel"],
-			defaultId: 0,
-			cancelId: 2,
-			title: "Unsaved Changes",
-			message: "You have unsaved changes.",
-			detail: "Do you want to save your project before closing?",
-		});
-
-		if (choice === 0) {
-			editorWindow.webContents.send("request-save-before-close");
-			ipcMain.once("save-before-close-done", (_event, saved: boolean) => {
-				if (!saved) {
-					isAppQuitting = false;
-					return;
-				}
-
-				if (process.platform === "win32" && !isAppQuitting) {
-					closeEditorWindowToHud(editorWindow);
-				} else {
-					closeEditorWindowBypassingUnsavedPrompt(editorWindow);
-				}
-			});
-		} else if (choice === 1) {
-			if (process.platform === "win32" && !isAppQuitting) {
-				closeEditorWindowToHud(editorWindow);
-			} else {
-				closeEditorWindowBypassingUnsavedPrompt(editorWindow);
-			}
-		} else {
-			isAppQuitting = false;
-		}
+		closeSave.start();
 	});
 
 	return editorWindow;
@@ -865,6 +875,10 @@ function createSourceSelectorWindowWrapper() {
 // explicitly with Cmd + Q.
 app.on("before-quit", () => {
 	isAppQuitting = true;
+	authCallbacks.close();
+	void clearRecordingTrashUndo().catch((error) =>
+		console.warn("Could not clear recording undo cache", error),
+	);
 	killWindowsCaptureProcess();
 	showCursor();
 	cleanupNativeVideoExportSessions();
@@ -878,17 +892,31 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
+	if (getHudOverlayWindow()?.isVisible()) return;
 	// On OS X it's common to re-create a window in the app when the
 	// dock icon is clicked and there are no other windows open.
 	focusOrCreateMainWindow();
 });
 
-app.on("second-instance", () => {
+app.on("second-instance", (_event, commandLine) => {
+	const authCallback = authCallbacks.find(commandLine);
+	if (authCallback) authCallbacks.dispatch(authCallback);
 	focusOrCreateMainWindow();
 });
 
 // Register all IPC handlers when app is ready
 app.whenReady().then(async () => {
+	authCallbacks.startDevServer();
+	if (process.defaultApp && process.argv[1]) {
+		app.setAsDefaultProtocolClient(authCallbacks.protocol, process.execPath, [
+			path.resolve(process.argv[1]),
+		]);
+	} else {
+		app.setAsDefaultProtocolClient(authCallbacks.protocol);
+	}
+	const startupAuthCallback = authCallbacks.find(process.argv);
+	if (startupAuthCallback) authCallbacks.dispatch(startupAuthCallback);
+
 	if (process.platform === "win32") {
 		app.setAppUserModelId("dev.recordly.app");
 	}
@@ -1085,7 +1113,7 @@ app.whenReady().then(async () => {
 
 			// Browser and Linux portal capture starts as soon as this callback
 			// resolves, before recording-state-changed is emitted.
-			reassertHudOverlayCaptureProtection();
+			beginHudCaptureProtection();
 
 			const sourceId = getSelectedSourceId();
 			// On Linux/Wayland, calling desktopCapturer.getSources() itself

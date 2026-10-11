@@ -185,6 +185,8 @@ export type WebcamPositionPreset =
 	| "custom";
 
 export interface WebcamOverlaySettings {
+	/** Source-time intervals containing webcam footage in an imported sequence. */
+	visibleRanges?: { startMs: number; endMs: number }[];
 	enabled: boolean;
 	sourcePath: string | null;
 	timeOffsetMs: number;
@@ -287,6 +289,9 @@ export interface ClipRegion {
 	 * left-trimming a sped-up clip moves the source in without moving the clip.
 	 */
 	sourceStartMs?: number;
+	/** Bounds of this recording within the shared media source. */
+	sourceMinMs?: number;
+	sourceMaxMs?: number;
 	speed: number;
 	muted?: boolean;
 	showSourceAudio?: boolean;
@@ -769,7 +774,7 @@ export const ZOOM_DEPTH_SCALES: Record<ZoomDepth, number> = {
 };
 
 export const DEFAULT_ZOOM_DEPTH: ZoomDepth = 3;
-export const DEFAULT_AUTO_ZOOM_DEPTH: ZoomDepth = 2;
+export const DEFAULT_AUTO_ZOOM_DEPTH: ZoomDepth = DEFAULT_ZOOM_DEPTH;
 
 export function clampFocusToDepth(focus: ZoomFocus, _depth: ZoomDepth): ZoomFocus {
 	return {

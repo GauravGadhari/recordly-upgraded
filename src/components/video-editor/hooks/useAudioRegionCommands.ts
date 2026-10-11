@@ -10,6 +10,7 @@ import {
 import type { AudioRegion, CursorTelemetryPoint, EditorEffectSection, KeystrokeEvent, ZoomRegion } from "../types";
 
 interface UseAudioRegionCommandsParams {
+	setSelectedClipId: Dispatch<SetStateAction<string | null>>;
 	setAudioRegions: Dispatch<SetStateAction<AudioRegion[]>>;
 	selectedAudioId: string | null;
 	setSelectedAudioId: Dispatch<SetStateAction<string | null>>;
@@ -28,6 +29,7 @@ export interface AddAudioMeta {
 }
 
 export function useAudioRegionCommands({
+	setSelectedClipId,
 	setAudioRegions,
 	selectedAudioId,
 	setSelectedAudioId,
@@ -45,6 +47,7 @@ export function useAudioRegionCommands({
 			if (id) {
 				setSelectedZoomId(null);
 				setSelectedAnnotationId(null);
+				setSelectedClipId(null);
 				setSelectedCaptionId(null);
 				setSelectedTransitionId?.(null);
 				setSelectedMemeId?.(null);
@@ -54,6 +57,7 @@ export function useAudioRegionCommands({
 		[
 			setActiveEffectSection,
 			setSelectedAnnotationId,
+			setSelectedClipId,
 			setSelectedAudioId,
 			setSelectedCaptionId,
 			setSelectedTransitionId,
@@ -85,6 +89,7 @@ export function useAudioRegionCommands({
 			setSelectedAudioId(id);
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
+			setSelectedClipId(null);
 			setSelectedCaptionId(null);
 			setSelectedTransitionId?.(null);
 			setSelectedMemeId?.(null);
@@ -95,6 +100,7 @@ export function useAudioRegionCommands({
 			setActiveEffectSection,
 			setAudioRegions,
 			setSelectedAnnotationId,
+			setSelectedClipId,
 			setSelectedAudioId,
 			setSelectedCaptionId,
 			setSelectedTransitionId,

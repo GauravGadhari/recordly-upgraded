@@ -53,8 +53,8 @@ type Props = {
 	verticalTrackingMode?: VerticalTrackingMode;
 	setVerticalTrackingMode?: Dispatch<SetStateAction<VerticalTrackingMode>>;
 	previewAspectRatioValue: number;
-	videoPlaybackRef: RefObject<VideoPlaybackRef>;
-	timelineRef: RefObject<TimelineEditorHandle>;
+	videoPlaybackRef: RefObject<VideoPlaybackRef | null>;
+	timelineRef: RefObject<TimelineEditorHandle | null>;
 	currentTime: number;
 	isPlaying: boolean;
 	previewVolume: number;

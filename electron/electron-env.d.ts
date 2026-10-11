@@ -223,6 +223,8 @@ interface Window {
 		hudOverlayDrag: (phase: "start" | "move" | "end", screenX: number, screenY: number) => void;
 		hudOverlayHide: () => void;
 		hudOverlayClose: () => void;
+		getEditorMode: () => Promise<boolean>;
+		onEditorModeChanged: (callback: (inEditor: boolean) => void) => () => void;
 		hudOverlayRendererReady: () => void;
 		hudOverlaySetWebcamPreviewVisible: (visible: boolean) => void;
 		getHudOverlayCaptureProtection: () => Promise<{ success: boolean; enabled: boolean }>;
@@ -235,6 +237,7 @@ interface Window {
 		) => Promise<{ success: boolean; enabled: boolean }>;
 		getAssetBasePath: () => Promise<string | null>;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
+		showProjectDashboard: () => Promise<void>;
 		switchToEditor: () => Promise<void>;
 		openSourceSelector: () => Promise<void>;
 		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource>;
@@ -821,6 +824,41 @@ interface Window {
 		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
+		getRecordingThumbnail: (
+			filePath: string,
+		) => Promise<import("../src/types/recordingLibrary").LibraryResult<string>>;
+		finishRecordingImport: (
+			keepPath: string,
+			commit?: boolean,
+		) => Promise<{ success: boolean; error?: string }>;
+		cancelRecordingImport: () => Promise<{ success: boolean }>;
+		getProjectPreview: (
+			projectPath: string,
+		) => Promise<
+			import("../src/types/recordingLibrary").LibraryResult<
+				import("../src/types/projectPreview").ProjectPreviewData
+			>
+		>;
+		listRecordings: (
+			includeSources?: boolean,
+		) => Promise<
+			import("../src/types/recordingLibrary").LibraryResult<
+				import("../src/types/recordingLibrary").RecordingLibraryEntry[]
+			>
+		>;
+		setRecordingsRemoved: (
+			paths: string[],
+			removed: boolean,
+		) => Promise<import("../src/types/recordingLibrary").LibraryResult<null>>;
+		importRecording: (
+			currentPath: string,
+			recordingPath: string,
+			webcam?: import("../src/types/recordingLibrary").RecordingWebcamSource,
+		) => Promise<
+			import("../src/types/recordingLibrary").LibraryResult<
+				import("../src/types/recordingLibrary").RecordingImportResult
+			>
+		>;
 		deleteRecordingFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
 		getLocalMediaUrl: (
 			filePath: string,
@@ -872,12 +910,34 @@ interface Window {
 			path?: string;
 			error?: string;
 		}>;
+		showRecordingHud: () => Promise<void>;
+		createProjectFile: (
+			data: unknown,
+			thumbnail?: string | null,
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			projectId?: string;
+			message?: string;
+			canceled?: boolean;
+		}>;
+		renameLibraryProject: (
+			path: string,
+			name: string,
+		) => Promise<{ success: boolean; path?: string; error?: string }>;
+		trashProjectFiles: (
+			paths: string[],
+		) => Promise<{ success: boolean; deleted: string[]; errors: string[] }>;
+		onProjectThumbnailReady: (
+			callback: (ready: { path: string; thumbnailPath: string; updatedAt: number }) => void,
+		) => () => void;
 		listProjectFiles: () => Promise<{
 			success: boolean;
 			projectsDir?: string | null;
 			entries: Array<{
 				path: string;
 				name: string;
+				createdAt?: number;
 				updatedAt: number;
 				thumbnailPath: string | null;
 				isCurrent: boolean;
@@ -933,11 +993,59 @@ interface Window {
 		onMenuLoadProject: (callback: () => void) => () => void;
 		onMenuSaveProject: (callback: () => void) => () => void;
 		onMenuSaveProjectAs: (callback: () => void) => () => void;
+		getWindowChrome: () => Promise<{ trafficLightsVisible: boolean }>;
+		onWindowChromeChanged: (
+			callback: (chrome: { trafficLightsVisible: boolean }) => void,
+		) => () => void;
 		getPlatform: () => Promise<string>;
+		isWindowFullscreen: () => Promise<boolean>;
+		onWindowFullscreenChanged: (callback: (isFullscreen: boolean) => void) => () => void;
 		getLinuxWindowSystem: () => Promise<"wayland" | "x11" | null>;
+		ackAuthCallbackUrl: (url: string) => Promise<void>;
+		getPendingAuthCallbackUrl: () => Promise<string | null>;
+		onAuthCallbackUrl: (callback: (url: string) => void) => () => void;
 		revealInFolder: (
 			filePath: string,
 		) => Promise<{ success: boolean; error?: string; message?: string }>;
+		cloudShareUpload: (input: {
+			filePath: string;
+			endpoint: string;
+			token?: string;
+			title?: string;
+			notes?: string;
+			uploadId?: string;
+		}) => Promise<{
+			success: boolean;
+			uploadId?: string;
+			shareUrl?: string;
+			canceled?: boolean;
+			error?: string;
+		}>;
+		cloudShareManage: (input: {
+			endpoint: string;
+			token: string;
+			action: "list" | "delete";
+			shareCode?: string;
+		}) => Promise<{
+			success: boolean;
+			error?: string;
+			videos?: Array<{
+				code: string;
+				createdAt?: string;
+				title: string;
+				size: number;
+				ready: boolean;
+				url: string;
+			}>;
+		}>;
+		cloudShareCancel: (uploadId: string) => Promise<{ success: boolean }>;
+		onCloudShareProgress: (
+			callback: (progress: {
+				uploadId: string;
+				uploadedBytes: number;
+				totalBytes: number;
+			}) => void,
+		) => () => void;
 		openRecordingsFolder: () => Promise<{ success: boolean; error?: string; message?: string }>;
 		getRecordingsDirectory: () => Promise<{
 			success: boolean;
@@ -996,6 +1104,7 @@ interface Window {
 		/** Countdown timer before recording */
 		getCountdownDelay: () => Promise<{ success: boolean; delay: number }>;
 		setCountdownDelay: (delay: number) => Promise<{ success: boolean; error?: string }>;
+		finishRecordingStartup: () => Promise<void>;
 		startCountdown: (seconds: number) => Promise<{ success: boolean; cancelled?: boolean }>;
 		cancelCountdown: () => Promise<{ success: boolean }>;
 		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;

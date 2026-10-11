@@ -1,6 +1,7 @@
 import {
 	ArrowClockwiseIcon,
 	CaretUpIcon,
+	House,
 	DotsThreeVerticalIcon,
 	MicrophoneIcon,
 	MicrophoneSlashIcon,
@@ -10,19 +11,20 @@ import {
 	VideoCameraIcon,
 	VideoCameraSlashIcon,
 	XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef } from "react";
-import { RxDragHandleDots2 } from "react-icons/rx";
 import { Separator } from "@/components/ui/separator";
 import { useScopedT } from "../../contexts/I18nContext";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import { useVideoDevices } from "../../hooks/useVideoDevices";
-import { supportsHudCaptureProtection } from "../../lib/hudCaptureProtection";
 import { Button } from "../ui/button";
 import { HudInteractionContext } from "./contexts/HudInteractionContext";
-import { canToggleFloatingWebcamPreview } from "./floatingWebcamPreview";
+import {
+	canToggleFloatingWebcamPreview,
+	WEBCAM_PREVIEW_RESIZE_HANDLES,
+} from "./floatingWebcamPreview";
 import { useHudBarDrag } from "./hooks/useHudBarDrag";
 import { useLaunchHudInteractionState } from "./hooks/useLaunchHudInteractionState";
 import { useLaunchWindowActions } from "./hooks/useLaunchWindowActions";
@@ -37,13 +39,9 @@ import {
 	useLaunchPopoverCoordinator,
 } from "./popovers/LaunchPopoverCoordinator";
 import { MicPopover } from "./popovers/MicPopover";
-import { MorePopover } from "./popovers/MorePopover";
-import { ProjectPopover } from "./popovers/ProjectPopover";
 import { SourcePopover } from "./popovers/SourcePopover";
 import { WebcamPopover } from "./popovers/WebcamPopover";
 import { RecordingControls } from "./RecordingControls";
-
-const SHOW_DEV_UPDATE_PREVIEW = import.meta.env.DEV;
 
 export function LaunchWindow() {
 	return (
@@ -55,7 +53,7 @@ export function LaunchWindow() {
 
 function LaunchWindowContent() {
 	const t = useScopedT("launch");
-	const { openId, requestClose, requestOpen } = useLaunchPopoverCoordinator();
+	const { openId, requestOpen } = useLaunchPopoverCoordinator();
 
 	const {
 		recording,
@@ -85,16 +83,8 @@ function LaunchWindowContent() {
 	const hudContentRef = useRef<HTMLDivElement>(null);
 	const hudBarRef = useRef<HTMLDivElement>(null);
 
-	const {
-		selectedSource,
-		hasSelectedSource,
-		projectLibraryEntries,
-		handleSourceSelect,
-		openVideoFile,
-		openProjectFromLibrary,
-		syncSelectedSource,
-		refreshProjectLibrary,
-	} = useLaunchWindowActions();
+	const { selectedSource, hasSelectedSource, handleSourceSelect, syncSelectedSource } =
+		useLaunchWindowActions();
 
 	const showWebcamControls = webcamEnabled && !recording;
 	const { devices, selectedDeviceId, setSelectedDeviceId } = useMicrophoneDevices(
@@ -107,16 +97,8 @@ function LaunchWindowContent() {
 		setSelectedDeviceId: setSelectedVideoDeviceId,
 	} = useVideoDevices(webcamEnabled || openId === "webcam");
 
-	const {
-		hudOverlayMousePassthroughSupported,
-		platform,
-		appVersion,
-		hideHudFromCapture,
-		chooseRecordingsDirectory,
-		toggleHudCaptureProtection,
-	} = useLaunchWindowSystemState(preparePermissions);
-
-	const hudCaptureProtectionSupported = supportsHudCaptureProtection(platform ?? "");
+	const { hudOverlayMousePassthroughSupported, platform } =
+		useLaunchWindowSystemState(preparePermissions);
 
 	useEffect(() => {
 		if (!selectedDeviceId) {
@@ -137,12 +119,16 @@ function LaunchWindowContent() {
 		setShowFloatingWebcamPreview,
 		showRecordingWebcamPreview,
 		webcamPreviewOffset,
+		webcamPreviewSize,
 		recordingWebcamPreviewContainerRef,
 		isWebcamPreviewDraggingRef,
 		webcamPreviewDragStartRef,
 		handleWebcamPreviewPointerDown,
 		handleWebcamPreviewPointerMove,
 		handleWebcamPreviewPointerUp,
+		handleWebcamPreviewResizePointerDown,
+		handleWebcamPreviewResizePointerMove,
+		handleWebcamPreviewResizePointerUp,
 		setWebcamPreviewNode,
 		setRecordingWebcamPreviewNode,
 	} = useWebcamPreviewOverlay({
@@ -207,12 +193,29 @@ function LaunchWindowContent() {
 		ease: [0.22, 1, 0.36, 1] as const,
 	};
 
+	const openHome = () => {
+		localStorage.setItem("recordly.open-dashboard", String(Date.now()));
+		void window.electronAPI.showProjectDashboard();
+	};
+	const homeButton = (
+		<Button
+			variant="ghost"
+			size="icon"
+			iconSize="lg"
+			aria-label={t("recording.home")}
+			title={t("recording.home")}
+			onClick={openHome}
+		>
+			<House weight="fill" className="size-5" />
+		</Button>
+	);
+
 	const recordingControls = (
 		<RecordingControls
+			onHome={openHome}
 			paused={paused}
 			microphoneEnabled={microphoneEnabled}
 			elapsed={elapsed}
-			onToggleMicrophone={() => setMicrophoneEnabled(!microphoneEnabled)}
 			onPauseResume={paused ? resumeRecording : pauseRecording}
 			onStopRecording={toggleRecording}
 			onHideHud={() => window.electronAPI?.hudOverlayHide?.()}
@@ -231,12 +234,16 @@ function LaunchWindowContent() {
 						onOpen={beginInteractiveHudAction}
 						trigger={
 							<Button
-								variant="outline"
+								variant="ghost"
 								size="lg"
-								className={`${styles.electronNoDrag} group gap-2 px-3 min-w-0 max-w-[180px] rounded-[11px] font-medium text-[12px] shrink-0 border-[var(--launch-border)] bg-[var(--launch-surface)] text-[var(--launch-text)] hover:border-[var(--launch-border-strong)] hover:bg-[var(--launch-hover)] transition-all ${openId === "sources" ? "border-[var(--launch-border-strong)] bg-[var(--launch-hover)]" : ""}`}
+								className={` ${styles.electronNoDrag} group gap-2 px-3 min-w-0 max-w-[180px] shrink-0  ${openId === "sources" ? "border-[var(--launch-border-strong)] bg-[var(--launch-hover)]" : ""} `}
 								title={selectedSource}
 							>
-								<MonitorIcon size={16} className="shrink-0" />
+								<MonitorIcon
+									weight={openId === "sources" ? "fill" : "regular"}
+									size={18}
+									className="size-5 shrink-0"
+								/>
 								<div className="flex-1 min-w-0 overflow-hidden">
 									<MarqueeText text={selectedSource} />
 								</div>
@@ -250,7 +257,7 @@ function LaunchWindowContent() {
 						}
 					/>
 
-					<Separator orientation="vertical" className="mx-[5px] h-6" />
+					<Separator orientation="vertical" className="mx-[5px] h-6 self-center" />
 				</>
 			)}
 
@@ -278,12 +285,16 @@ function LaunchWindowContent() {
 								? t("recording.disableMicrophone")
 								: t("recording.enableMicrophone")
 						}
-						className={microphoneEnabled ? styles.ibActive : ""}
+						className={microphoneEnabled ? "text-accent" : ""}
 					>
 						{microphoneEnabled ? (
-							<MicrophoneIcon size={18} />
+							<MicrophoneIcon
+								weight={microphoneEnabled ? "fill" : "regular"}
+								className="size-5"
+								size={18}
+							/>
 						) : (
-							<MicrophoneSlashIcon size={18} />
+							<MicrophoneSlashIcon className="size-5" />
 						)}
 					</Button>
 				}
@@ -318,12 +329,16 @@ function LaunchWindowContent() {
 								? t("recording.disableWebcam")
 								: t("recording.enableWebcam")
 						}
-						className={webcamEnabled ? styles.ibActive : ""}
+						className={webcamEnabled ? "text-accent" : ""}
 					>
 						{webcamEnabled ? (
-							<VideoCameraIcon size={18} />
+							<VideoCameraIcon
+								weight={webcamEnabled ? "fill" : "regular"}
+								className="size-5"
+								size={18}
+							/>
 						) : (
-							<VideoCameraSlashIcon size={18} />
+							<VideoCameraSlashIcon className="size-5" />
 						)}
 					</Button>
 				}
@@ -338,16 +353,21 @@ function LaunchWindowContent() {
 						size="icon"
 						iconSize="lg"
 						title={t("recording.countdownDelay")}
-						className={countdownDelay > 0 ? styles.ibActive : ""}
+						className={countdownDelay > 0 ? "text-accent" : ""}
 					>
-						<TimerIcon size={18} />
+						<TimerIcon
+							weight={openId === "countdown" ? "fill" : "regular"}
+							className="size-5"
+						/>
 					</Button>
 				}
 			/>
 
-			<button
+			<Button
 				type="button"
-				className={`${styles.recBtn} ${styles.electronNoDrag}`}
+				variant="destructive"
+				size="icon"
+				className={styles.electronNoDrag}
 				onClick={
 					hasSelectedSource || platform === "linux"
 						? toggleRecording
@@ -360,49 +380,11 @@ function LaunchWindowContent() {
 				title={t("recording.record")}
 			>
 				<div className={styles.recDot} />
-			</button>
+			</Button>
 
-			<Separator orientation="vertical" className="mx-[5px] h-6" />
+			<Separator orientation="vertical" className="mx-[5px] h-6 self-center" />
 
-			<div className="relative w-0 h-0">
-				<ProjectPopover
-					entries={projectLibraryEntries}
-					onOpenProject={openProjectFromLibrary}
-					trigger={<div className="absolute inset-0 pointer-events-none opacity-0" />}
-				/>
-			</div>
-
-			<MorePopover
-				supportsHudCaptureProtection={hudCaptureProtectionSupported}
-				hideHudFromCapture={hideHudFromCapture}
-				onToggleHudCaptureProtection={() => {
-					void toggleHudCaptureProtection();
-				}}
-				onChooseRecordingsDirectory={() => {
-					void chooseRecordingsDirectory();
-				}}
-				onOpenVideoFile={() => {
-					void openVideoFile();
-				}}
-				onOpenProjectBrowser={() => {
-					refreshProjectLibrary().then(() => {
-						requestOpen("projects");
-					});
-				}}
-				showDevUpdatePreview={SHOW_DEV_UPDATE_PREVIEW}
-				onPreviewUpdateUi={() => {
-					if (openId) requestClose(openId);
-					void window.electronAPI.previewUpdateToast().catch((error) => {
-						console.warn("Failed to preview update toast:", error);
-					});
-				}}
-				appVersion={appVersion}
-				trigger={
-					<Button variant="ghost" size="icon" iconSize="lg" title={t("recording.more")}>
-						<DotsThreeVerticalIcon size={18} />
-					</Button>
-				}
-			/>
+			{homeButton}
 
 			<Button
 				variant="ghost"
@@ -411,7 +393,7 @@ function LaunchWindowContent() {
 				onClick={() => window.electronAPI?.hudOverlayHide?.()}
 				title={t("recording.hideHud")}
 			>
-				<MinusIcon size={16} />
+				<MinusIcon className="size-5" />
 			</Button>
 
 			<Button
@@ -421,7 +403,7 @@ function LaunchWindowContent() {
 				onClick={() => window.electronAPI?.hudOverlayClose?.()}
 				title={t("recording.closeApp")}
 			>
-				<XIcon size={16} />
+				<XIcon className="size-5" />
 			</Button>
 		</>
 	);
@@ -480,7 +462,11 @@ function LaunchWindowContent() {
 									onPointerUp={handleHudBarPointerUp}
 									onPointerCancel={handleHudBarPointerUp}
 								>
-									<RxDragHandleDots2 size={14} className="text-[#6b6b78]" />
+									<DotsThreeVerticalIcon
+										weight="fill"
+										size={18}
+										className="text-[#6b6b78]"
+									/>
 								</div>
 
 								<div className={styles.barStateViewport}>
@@ -527,6 +513,8 @@ function LaunchWindowContent() {
 								title={t("recording.webcam")}
 								style={{
 									transform: `translate(${webcamPreviewOffset.x}px, ${webcamPreviewOffset.y}px)`,
+									width: webcamPreviewSize.width,
+									height: webcamPreviewSize.height,
 								}}
 								onMouseEnter={handleHudMouseEnter}
 								onMouseLeave={handleHudMouseLeave}
@@ -542,6 +530,17 @@ function LaunchWindowContent() {
 									playsInline
 									style={{ transform: "scaleX(-1)" }}
 								/>
+								{WEBCAM_PREVIEW_RESIZE_HANDLES.map((handle) => (
+									<div
+										key={handle}
+										data-resize-handle={handle}
+										className={styles.recordingWebcamPreviewResizeHandle}
+										onPointerDown={handleWebcamPreviewResizePointerDown}
+										onPointerMove={handleWebcamPreviewResizePointerMove}
+										onPointerUp={handleWebcamPreviewResizePointerUp}
+										onPointerCancel={handleWebcamPreviewResizePointerUp}
+									/>
+								))}
 							</div>
 						)}
 					</div>

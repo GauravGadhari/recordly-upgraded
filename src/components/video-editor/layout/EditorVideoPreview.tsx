@@ -25,7 +25,7 @@ type Props = {
 	previewVersion: number;
 	aspectRatio: AspectRatio;
 	verticalTrackingMode?: VerticalTrackingMode;
-	playbackRef: RefObject<VideoPlaybackRef>;
+	playbackRef: RefObject<VideoPlaybackRef | null>;
 	currentTime: number;
 	isPlaying: boolean;
 	previewVolume: number;

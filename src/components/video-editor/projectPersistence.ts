@@ -1359,3 +1359,26 @@ export function createProjectData(
 		editor,
 	};
 }
+
+export function stripProjectUserPreferences<T extends object>(editor: T): T {
+	const result = { ...editor };
+	for (const key of [
+		"exportEncodingMode",
+		"exportBackendPreference",
+		"exportPipelineModel",
+		"exportQuality",
+		"mp4FrameRate",
+		"exportFormat",
+		"gifFrameRate",
+		"gifLoop",
+		"gifSizePreset",
+		"publishDestination",
+		"includeCaptionSidecar",
+		"whisperExecutablePath",
+		"whisperModelPath",
+	]) {
+		delete (result as Record<string, unknown>)[key];
+	}
+	return result;
+}
+

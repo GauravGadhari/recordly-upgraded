@@ -20,8 +20,8 @@ type Props = {
 	t: ReturnType<typeof useI18n>["t"];
 	headerLeftControlsPaddingClass: string;
 	project: ReturnType<typeof useProjectState>;
-	projectBrowserTriggerRef: RefObject<HTMLButtonElement>;
-	projectNameInputRef: RefObject<HTMLInputElement>;
+	projectBrowserTriggerRef: RefObject<HTMLButtonElement | null>;
+	projectNameInputRef: RefObject<HTMLInputElement | null>;
 	projectDisplayName: string;
 	hasUnsavedChanges: boolean;
 	canUndo: boolean;

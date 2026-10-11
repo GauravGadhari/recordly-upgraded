@@ -199,6 +199,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	hudOverlayClose: () => {
 		ipcRenderer.send("hud-overlay-close");
 	},
+	getEditorMode: () => ipcRenderer.invoke("get-editor-mode"),
+	onEditorModeChanged: (callback: (inEditor: boolean) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, inEditor: boolean) =>
+			callback(inEditor);
+		ipcRenderer.on("editor-mode-changed", listener);
+		return () => ipcRenderer.removeListener("editor-mode-changed", listener);
+	},
 	hudOverlayRendererReady: () => {
 		ipcRenderer.send("hud-overlay-renderer-ready");
 	},
@@ -526,6 +533,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getSources: async (opts: Electron.SourcesOptions) => {
 		return await ipcRenderer.invoke("get-sources", opts);
 	},
+	showRecordingHud: () => ipcRenderer.invoke("show-recording-hud"),
+	createProjectFile: (data: unknown, thumbnail?: string | null) =>
+		ipcRenderer.invoke("create-project-file", data, thumbnail),
+	renameLibraryProject: (path: string, name: string) =>
+		ipcRenderer.invoke("rename-library-project", path, name),
+	trashProjectFiles: (paths: string[]) => ipcRenderer.invoke("trash-project-files", paths),
+	showProjectDashboard: () => ipcRenderer.invoke("show-project-dashboard"),
 	switchToEditor: () => {
 		return ipcRenderer.invoke("switch-to-editor");
 	},
@@ -816,6 +830,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	clearCurrentVideoPath: () => {
 		return ipcRenderer.invoke("clear-current-video-path");
 	},
+	getRecordingThumbnail: (filePath: string) =>
+		ipcRenderer.invoke("get-recording-thumbnail", filePath),
+	finishRecordingImport: (keepPath: string, commit?: boolean) =>
+		ipcRenderer.invoke("finish-recording-import", keepPath, commit),
+	cancelRecordingImport: () => ipcRenderer.invoke("cancel-recording-import"),
+	getProjectPreview: (projectPath: string) =>
+		ipcRenderer.invoke("get-project-preview", projectPath),
+	listRecordings: (includeSources?: boolean) =>
+		ipcRenderer.invoke("list-recordings", includeSources),
+	setRecordingsRemoved: (paths: string[], removed: boolean) =>
+		ipcRenderer.invoke("set-recordings-removed", paths, removed),
+	importRecording: (
+		currentPath: string,
+		recordingPath: string,
+		webcam?: import("../src/types/recordingLibrary").RecordingWebcamSource,
+	) => ipcRenderer.invoke("import-recording", currentPath, recordingPath, webcam),
 	deleteRecordingFile: (filePath: string) => {
 		return ipcRenderer.invoke("delete-recording-file", filePath);
 	},
@@ -860,6 +890,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	getProjectsDirectory: () => {
 		return ipcRenderer.invoke("get-projects-directory");
+	},
+	onProjectThumbnailReady: (
+		callback: (ready: { path: string; thumbnailPath: string; updatedAt: number }) => void,
+	) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			ready: { path: string; thumbnailPath: string; updatedAt: number },
+		) => callback(ready);
+		ipcRenderer.on("project-library-thumbnail-ready", listener);
+		return () => ipcRenderer.removeListener("project-library-thumbnail-ready", listener);
 	},
 	listProjectFiles: () => {
 		return ipcRenderer.invoke("list-project-files");
@@ -969,14 +1009,68 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("menu-save-project-as", listener);
 		return () => ipcRenderer.removeListener("menu-save-project-as", listener);
 	},
+	getWindowChrome: () => ipcRenderer.invoke("get-window-chrome"),
+	onWindowChromeChanged: (callback: (chrome: { trafficLightsVisible: boolean }) => void) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			chrome: { trafficLightsVisible: boolean },
+		) => callback(chrome);
+		ipcRenderer.on("window-chrome-changed", listener);
+		return () => ipcRenderer.removeListener("window-chrome-changed", listener);
+	},
 	getPlatform: () => {
 		return ipcRenderer.invoke("get-platform");
+	},
+	isWindowFullscreen: () => {
+		return ipcRenderer.invoke("get-window-fullscreen");
+	},
+	onWindowFullscreenChanged: (callback: (isFullscreen: boolean) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, isFullscreen: boolean) =>
+			callback(isFullscreen);
+		ipcRenderer.on("window-fullscreen-changed", listener);
+		return () => ipcRenderer.removeListener("window-fullscreen-changed", listener);
 	},
 	getLinuxWindowSystem: () => {
 		return ipcRenderer.invoke("get-linux-window-system");
 	},
+	ackAuthCallbackUrl: (url: string) => ipcRenderer.invoke("auth:ack-callback", url),
+	getPendingAuthCallbackUrl: () => ipcRenderer.invoke("auth:get-pending-callback"),
+	onAuthCallbackUrl: (callback: (url: string) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
+		ipcRenderer.on("auth:callback", listener);
+		return () => ipcRenderer.removeListener("auth:callback", listener);
+	},
 	revealInFolder: (filePath: string) => {
 		return ipcRenderer.invoke("reveal-in-folder", filePath);
+	},
+	cloudShareUpload: (input: {
+		filePath: string;
+		endpoint: string;
+		token?: string;
+		title?: string;
+		notes?: string;
+		uploadId?: string;
+	}) => ipcRenderer.invoke("cloud-share-upload", input),
+	cloudShareManage: (input: {
+		endpoint: string;
+		token: string;
+		action: "list" | "delete";
+		shareCode?: string;
+	}) => ipcRenderer.invoke("cloud-share-manage", input),
+	cloudShareCancel: (uploadId: string) => ipcRenderer.invoke("cloud-share-cancel", uploadId),
+	onCloudShareProgress: (
+		callback: (progress: {
+			uploadId: string;
+			uploadedBytes: number;
+			totalBytes: number;
+		}) => void,
+	) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			progress: { uploadId: string; uploadedBytes: number; totalBytes: number },
+		) => callback(progress);
+		ipcRenderer.on("cloud-share-progress", listener);
+		return () => ipcRenderer.removeListener("cloud-share-progress", listener);
 	},
 	openRecordingsFolder: () => {
 		return ipcRenderer.invoke("open-recordings-folder");
@@ -1010,14 +1104,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.send("set-has-unsaved-changes", hasChanges);
 	},
 	onRequestSaveBeforeClose: (callback: () => Promise<boolean>) => {
-		const listener = async () => {
+		const listener = async (_event: Electron.IpcRendererEvent, requestId: unknown) => {
 			let saved = false;
 			try {
 				saved = await callback();
 			} catch {
 				saved = false;
 			}
-			ipcRenderer.send("save-before-close-done", saved);
+			ipcRenderer.send("save-before-close-done", saved, requestId);
 		};
 		ipcRenderer.on("request-save-before-close", listener);
 		return () => ipcRenderer.removeListener("request-save-before-close", listener);
@@ -1042,6 +1136,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	}) => ipcRenderer.invoke("set-recording-preferences", prefs),
 	getCountdownDelay: () => ipcRenderer.invoke("get-countdown-delay"),
 	setCountdownDelay: (delay: number) => ipcRenderer.invoke("set-countdown-delay", delay),
+	finishRecordingStartup: () => ipcRenderer.invoke("finish-recording-startup"),
 	startCountdown: (seconds: number) => ipcRenderer.invoke("start-countdown", seconds),
 	cancelCountdown: () => ipcRenderer.invoke("cancel-countdown"),
 	getActiveCountdown: () => ipcRenderer.invoke("get-active-countdown"),

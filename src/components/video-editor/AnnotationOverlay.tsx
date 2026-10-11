@@ -61,12 +61,12 @@ interface AnnotationOverlayProps {
 	isSelectedBoost: boolean; // Boost z-index when selected for easy editing
 }
 
-function clampPercent(value: number) {
+function positivePercent(value: number) {
 	if (!Number.isFinite(value)) {
 		return 0;
 	}
 
-	return Math.min(100, Math.max(0, value));
+	return Math.max(1, value);
 }
 
 /** Render an annotation in preview space with editor drag and resize controls. */
@@ -109,18 +109,18 @@ export function AnnotationOverlay({
 
 		return {
 			position: {
-				x: clampPercent(
+				x:
 					((nextSceneX - safeRecordingRect.x) / Math.max(1, safeRecordingRect.width)) *
-						100,
-				),
-				y: clampPercent(
+					100,
+				y:
 					((nextSceneY - safeRecordingRect.y) / Math.max(1, safeRecordingRect.height)) *
-						100,
-				),
+					100,
 			},
 			size: {
-				width: clampPercent((nextSceneWidth / Math.max(1, safeRecordingRect.width)) * 100),
-				height: clampPercent(
+				width: positivePercent(
+					(nextSceneWidth / Math.max(1, safeRecordingRect.width)) * 100,
+				),
+				height: positivePercent(
 					(nextSceneHeight / Math.max(1, safeRecordingRect.height)) * 100,
 				),
 			},
@@ -324,6 +324,7 @@ export function AnnotationOverlay({
 
 	return (
 		<Rnd
+			data-annotation-id={annotation.id}
 			position={{ x, y }}
 			size={{ width, height }}
 			scale={interactionScale}
