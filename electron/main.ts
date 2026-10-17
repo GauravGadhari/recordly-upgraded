@@ -78,7 +78,9 @@ ignoreBrokenConsolePipe(process.stdout);
 ignoreBrokenConsolePipe(process.stderr);
 
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
-app.commandLine.appendSwitch("enable-unsafe-webgpu");
+if (process.platform !== "linux") {
+	app.commandLine.appendSwitch("enable-unsafe-webgpu");
+}
 app.commandLine.appendSwitch("enable-gpu-rasterization");
 
 app.on("web-contents-created", (_event, contents) => {

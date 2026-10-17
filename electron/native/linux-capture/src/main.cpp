@@ -537,21 +537,21 @@ static std::string buildEncoderPipeline(const std::string& outputPath, bool forc
         if (hasVaapiVP9) {
             return "vaapipostproc ! vaapivp9enc rate-control=cbr bitrate=32000 keyframe-period=60 ! webmmux";
         }
-        return "videoconvert ! vp8enc bitrate=30000000 threads=8 cpu-used=4 deadline=1 ! webmmux";
+        return "vp8enc bitrate=30000000 threads=8 cpu-used=4 deadline=1 ! webmmux";
     }
 
     // MP4 path: prioritize GPU hardware encoders for buttery-smooth 60fps with zero CPU frame-drops
     if (hasVaapiH264) {
-        return "vaapih264enc rate-control=cbr bitrate=32000 keyframe-period=60 ! h264parse ! mp4mux faststart=true";
+        return "vaapih264enc rate-control=cqp init-qp=20 max-bframes=0 keyframe-period=60 ! h264parse ! mp4mux faststart=true";
     }
     if (hasNvh264) {
         return "nvh264enc bitrate=32000 preset=low-latency-hq rc-mode=cbr gop-size=60 ! h264parse ! mp4mux faststart=true";
     }
     if (hasVaH264) {
-        return "vah264enc bitrate=32000 ! h264parse ! mp4mux faststart=true";
+        return "vah264enc ! h264parse ! mp4mux faststart=true";
     }
     if (hasX264) {
-        return "x264enc tune=zerolatency speed-preset=ultrafast bitrate=28000 key-int-max=60 ! h264parse ! mp4mux faststart=true";
+        return "x264enc tune=zerolatency speed-preset=ultrafast bitrate=28000 key-int-max=60 threads=4 ! h264parse ! mp4mux faststart=true";
     }
     // Fallback to VP8/WebM
     return "vp8enc bitrate=28000000 threads=8 cpu-used=4 deadline=1 ! webmmux";
@@ -563,12 +563,13 @@ static GstElement* createCapturePipeline(int pwFd, uint32_t nodeId, const Captur
 
     std::ostringstream pipelineStr;
     pipelineStr << "pipewiresrc fd=" << pwFd << " path=" << nodeId
-                << " always-copy=true do-timestamp=true keepalive-time=1000 min-buffers=8"
-                << " ! videoconvert"
-                << " ! video/x-raw,format=NV12"
-                << " ! videorate"
+                << " always-copy=true do-timestamp=true keepalive-time=1000 min-buffers=12"
+                << " ! queue max-size-buffers=60 max-size-time=1000000000 max-size-bytes=0 leaky=downstream"
+                << " ! videorate skip-to-first=true drop-only=false"
                 << " ! video/x-raw,framerate=" << config.fps << "/1"
-                << " ! queue max-size-buffers=120 max-size-time=2000000000 max-size-bytes=0"
+                << " ! videoconvert n-threads=4"
+                << " ! video/x-raw,format=NV12"
+                << " ! queue max-size-buffers=60 max-size-time=1000000000 max-size-bytes=0"
                 << " ! " << encoderPipeline
                 << " ! filesink location=\"" << config.outputPath << "\" sync=false";
 

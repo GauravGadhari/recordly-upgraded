@@ -69,6 +69,7 @@ import type {
 	KeystrokeEvent,
 	KeystrokeVisualSettings,
 	Padding,
+	ScrollSfxStyle,
 	WebcamOverlaySettings,
 	WebcamPositionPreset,
 	WhooshSfxStyle,
@@ -3732,7 +3733,7 @@ export function SettingsPanel({
 																}
 															}}
 														>
-															<SelectTrigger className="h-6 w-32 text-[10px] bg-editor-bg border-foreground/10">
+															<SelectTrigger className="h-7 w-40 text-xs bg-editor-bg border-foreground/10 px-2 min-w-0">
 																<SelectValue />
 															</SelectTrigger>
 															<SelectContent>
@@ -3832,7 +3833,7 @@ export function SettingsPanel({
 																})
 															}
 														>
-															<SelectTrigger className="h-6 w-36 text-[10px] bg-editor-bg border-foreground/10">
+															<SelectTrigger className="h-7 w-40 text-xs bg-editor-bg border-foreground/10 px-2 min-w-0">
 																<SelectValue />
 															</SelectTrigger>
 															<SelectContent>
@@ -3843,7 +3844,7 @@ export function SettingsPanel({
 														</Select>
 													</div>
 													{(cursorSfx?.whooshStyle ?? "procedural") === "procedural" ? (
-														<p className="text-[9.5px] text-muted-foreground/80 bg-white/[0.03] border border-white/[0.06] rounded px-2 py-1 leading-tight">
+														<p className="my-1 text-[9.5px] text-muted-foreground/80 bg-white/[0.03] border border-white/[0.06] rounded px-2 py-1 leading-normal">
 															Synthesized via code: adapts cutoff, resonance & stereo panning to cursor movement.
 														</p>
 													) : null}
@@ -3858,7 +3859,7 @@ export function SettingsPanel({
 																})
 															}
 														>
-															<SelectTrigger className="h-6 w-36 text-[10px] bg-editor-bg border-foreground/10">
+															<SelectTrigger className="h-7 w-40 text-xs bg-editor-bg border-foreground/10 px-2 min-w-0">
 																<SelectValue />
 															</SelectTrigger>
 															<SelectContent>
@@ -3879,6 +3880,66 @@ export function SettingsPanel({
 															onCursorSfxChange?.({
 																...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
 																whooshVolume: v,
+															})
+														}
+														formatValue={(v) => `${Math.round(v * 100)}%`}
+														parseInput={(t) => parseFloat(t.replace(/%$/, "")) / 100}
+													/>
+												</div>
+											) : null}
+										</div>
+
+										{/* Scroll SFX */}
+										<div className="flex flex-col gap-1.5 rounded-lg border border-foreground/5 bg-foreground/[0.02] p-2">
+											<div className="flex items-center justify-between">
+												<span className="text-[11px] font-medium text-foreground">
+													{tSettings("effects.cursorSfx.scroll", "Scroll Sound")}
+												</span>
+												<Switch
+													checked={cursorSfx?.scrollEnabled ?? true}
+													onCheckedChange={(checked) =>
+														onCursorSfxChange?.({
+															...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+															scrollEnabled: checked,
+														})
+													}
+													className="data-[state=checked]:bg-[#2563EB] scale-75"
+												/>
+											</div>
+											{(cursorSfx?.scrollEnabled ?? true) ? (
+												<div className="flex flex-col gap-1.5 pt-1">
+													<div className="flex items-center justify-between gap-2">
+														<span className="text-[10px] text-muted-foreground">Style</span>
+														<Select
+															value={cursorSfx?.scrollStyle ?? "ratchet"}
+															onValueChange={(val) =>
+																onCursorSfxChange?.({
+																	...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																	scrollStyle: val as ScrollSfxStyle,
+																})
+															}
+														>
+															<SelectTrigger className="h-7 w-40 text-xs bg-editor-bg border-foreground/10 px-2 min-w-0">
+																<SelectValue />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="ratchet">Ratchet</SelectItem>
+																<SelectItem value="smooth">Smooth</SelectItem>
+																<SelectItem value="notch">Crisp Notch</SelectItem>
+															</SelectContent>
+														</Select>
+													</div>
+													<SliderControl
+														label={tSettings("effects.cursorSfx.volume", "Volume")}
+														value={cursorSfx?.scrollVolume ?? 0.5}
+														defaultValue={0.5}
+														min={0}
+														max={1}
+														step={0.05}
+														onChange={(v) =>
+															onCursorSfxChange?.({
+																...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																scrollVolume: v,
 															})
 														}
 														formatValue={(v) => `${Math.round(v * 100)}%`}

@@ -30,12 +30,19 @@ export function Select({
 }
 export function SelectTrigger({
 	children,
+	className,
 	...props
 }: Omit<ComponentProps<typeof HeroSelect.Trigger>, "children"> & {
 	children?: import("react").ReactNode;
 }) {
 	return (
-		<HeroSelect.Trigger {...props}>
+		<HeroSelect.Trigger
+			{...props}
+			className={cn(
+				"overflow-hidden whitespace-nowrap min-w-0 truncate",
+				className,
+			)}
+		>
 			{children}
 			<HeroSelect.Indicator />
 		</HeroSelect.Trigger>
@@ -43,10 +50,14 @@ export function SelectTrigger({
 }
 export function SelectValue({
 	placeholder,
+	className,
 	...props
 }: ComponentProps<typeof HeroSelect.Value> & { placeholder?: string }) {
 	return (
-		<HeroSelect.Value {...props}>
+		<HeroSelect.Value
+			{...props}
+			className={cn("truncate min-w-0 block text-left", className)}
+		>
 			{({ selectedText }) => selectedText || placeholder || "Select"}
 		</HeroSelect.Value>
 	);

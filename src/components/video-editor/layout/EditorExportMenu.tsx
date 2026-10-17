@@ -2,10 +2,10 @@ import { DownloadSimple as Download } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import type { useI18n } from "@/contexts/I18nContext";
 import { ExportSettingsMenu } from "../ExportSettingsMenu";
 import type { useExportDimensions } from "../export/useExportDimensions";
@@ -95,8 +95,8 @@ export function EditorExportMenu(props: Props) {
 	} = exportStatus;
 
 	return (
-		<DropdownMenu open={showExportDropdown} onOpenChange={setShowExportDropdown} modal={false}>
-			<DropdownMenuTrigger asChild>
+		<Popover open={showExportDropdown} onOpenChange={setShowExportDropdown} modal={false}>
+			<PopoverTrigger asChild>
 				<Button
 					type="button"
 					onClick={handleOpenExportDropdown}
@@ -107,8 +107,8 @@ export function EditorExportMenu(props: Props) {
 						{t("common.actions.export", "Export")}
 					</span>
 				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent
+			</PopoverTrigger>
+			<PopoverContent
 				align="end"
 				sideOffset={10}
 				className="w-[360px] border-none bg-transparent p-0 shadow-none"
@@ -304,7 +304,7 @@ export function EditorExportMenu(props: Props) {
 						className="shadow-2xl"
 					/>
 				)}
-			</DropdownMenuContent>
-		</DropdownMenu>
+			</PopoverContent>
+		</Popover>
 	);
 }
