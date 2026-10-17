@@ -719,16 +719,18 @@ export function registerRecordingHandlers(
 					const timestamp = Date.now();
 					const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`);
 
+					const startPaused = Boolean(options?.startPaused);
 					const config = {
 						outputPath,
 						fps: 60,
 						cursorMode: 1, // 1 = Hidden (omitted from video!)
+						startPaused,
 					};
 
 					setLinuxCaptureOutputBuffer("");
 					setLinuxCaptureTargetPath(outputPath);
 					setLinuxCaptureStopRequested(false);
-					setLinuxCapturePaused(false);
+					setLinuxCapturePaused(startPaused);
 
 					lcProc = spawn(binPath, [JSON.stringify(config)], {
 						cwd: recordingsDir,

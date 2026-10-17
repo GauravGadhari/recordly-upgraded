@@ -37,6 +37,26 @@
 // ─── Global stop/pause state ───────────────────────────────────────────────
 static std::atomic<bool> g_stopRequested{false};
 static std::atomic<bool> g_pauseRequested{false};
+static std::atomic<bool> g_resumePending{false};
+static std::atomic<uint64_t> g_pauseStartPts{0};
+static std::atomic<uint64_t> g_lastRawPts{0};
+static std::atomic<uint64_t> g_lastBufferPts{0};
+
+static bool g_hasFirstFrame = false;
+static uint64_t g_firstFrameBasePts = 0;
+static uint64_t g_accumulatedPausedPts = 0;
+
+static void resetSyncProbeState(bool startPaused) {
+    g_pauseRequested.store(startPaused);
+    g_resumePending.store(false);
+    g_pauseStartPts.store(0);
+    g_lastRawPts.store(0);
+    g_lastBufferPts.store(0);
+    g_firstFrameBasePts = 0;
+    g_accumulatedPausedPts = 0;
+    g_hasFirstFrame = false;
+}
+
 static std::mutex g_stopMutex;
 static std::condition_variable g_stopCv;
 
@@ -52,6 +72,7 @@ struct CaptureConfig {
     std::string outputPath;
     int fps = 60;
     int cursorMode = 1; // 1=Hidden, 2=Embedded
+    bool startPaused = false;
 };
 
 // ─── Minimal JSON parser (matches windows-capture style) ───────────────────
@@ -97,6 +118,17 @@ static bool parseConfig(const std::string& json, CaptureConfig& cfg) {
         }
     };
 
+    auto findBool = [&](const std::string& key) -> bool {
+        auto pos = json.find("\"" + key + "\"");
+        if (pos == std::string::npos) return false;
+        pos = json.find(':', pos);
+        if (pos == std::string::npos) return false;
+        pos++;
+        while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
+        if (pos + 4 <= json.size() && json.substr(pos, 4) == "true") return true;
+        return false;
+    };
+
     cfg.outputPath = findString("outputPath");
     if (cfg.outputPath.empty()) return false;
 
@@ -105,6 +137,8 @@ static bool parseConfig(const std::string& json, CaptureConfig& cfg) {
 
     int cm = findInt("cursorMode");
     if (cm > 0) cfg.cursorMode = cm;
+
+    cfg.startPaused = findBool("startPaused");
 
     return true;
 }
@@ -558,13 +592,55 @@ static std::string buildEncoderPipeline(const std::string& outputPath, bool forc
     return "vp8enc bitrate=28000000 threads=8 cpu-used=4 deadline=1 ! webmmux";
 }
 
-static void setValveDrop(GstElement* pipeline, bool drop) {
-    if (!pipeline) return;
-    GstElement* valve = gst_bin_get_by_name(GST_BIN(pipeline), "pause_valve");
-    if (valve) {
-        g_object_set(G_OBJECT(valve), "drop", drop ? TRUE : FALSE, nullptr);
-        gst_object_unref(valve);
+// ─── Timestamp Synchronization Pad Probe ───────────────────────────────────
+// Anchors the first unpaused frame to PTS/DTS = 0 and subtracts paused duration
+// so mp4mux never creates time gaps or sync offsets.
+static GstPadProbeReturn syncProbeCallback(GstPad* pad, GstPadProbeInfo* info, gpointer user_data) {
+    if (g_pauseRequested.load()) {
+        return GST_PAD_PROBE_DROP;
     }
+
+    if (!(info->type & GST_PAD_PROBE_TYPE_BUFFER)) {
+        return GST_PAD_PROBE_OK;
+    }
+
+    GstBuffer* buf = GST_PAD_PROBE_INFO_BUFFER(info);
+    if (!buf) {
+        return GST_PAD_PROBE_OK;
+    }
+
+    GstClockTime pts = GST_BUFFER_PTS(buf);
+    if (pts == GST_CLOCK_TIME_NONE) {
+        return GST_PAD_PROBE_OK;
+    }
+
+    g_lastRawPts.store(pts);
+
+    if (!g_hasFirstFrame) {
+        g_hasFirstFrame = true;
+        g_firstFrameBasePts = pts;
+        g_accumulatedPausedPts = 0;
+        g_resumePending.store(false);
+    }
+
+    if (g_resumePending.exchange(false)) {
+        uint64_t pauseStart = g_pauseStartPts.load();
+        if (pauseStart > 0 && pts > pauseStart) {
+            g_accumulatedPausedPts += (pts - pauseStart);
+        }
+    }
+
+    buf = gst_buffer_make_writable(buf);
+    GST_PAD_PROBE_INFO_DATA(info) = buf;
+
+    uint64_t rawPts = (pts >= g_firstFrameBasePts) ? (pts - g_firstFrameBasePts) : 0;
+    uint64_t adjusted = (rawPts >= g_accumulatedPausedPts) ? (rawPts - g_accumulatedPausedPts) : 0;
+
+    GST_BUFFER_PTS(buf) = adjusted;
+    GST_BUFFER_DTS(buf) = adjusted;
+    g_lastBufferPts.store(adjusted);
+
+    return GST_PAD_PROBE_OK;
 }
 
 // ─── Build GStreamer capture pipeline ──────────────────────────────────────
@@ -579,7 +655,7 @@ static GstElement* createCapturePipeline(int pwFd, uint32_t nodeId, const Captur
                 << " ! video/x-raw,framerate=" << config.fps << "/1"
                 << " ! videoconvert n-threads=4"
                 << " ! video/x-raw,format=NV12"
-                << " ! valve name=pause_valve drop=false drop-mode=forward-sticky-events"
+                << " ! identity name=sync_probe"
                 << " ! queue max-size-buffers=60 max-size-time=1000000000 max-size-bytes=0"
                 << " ! " << encoderPipeline
                 << " ! filesink location=\"" << config.outputPath << "\" sync=false";
@@ -591,6 +667,16 @@ static GstElement* createCapturePipeline(int pwFd, uint32_t nodeId, const Captur
                   << "\nError: " << (gstErr ? gstErr->message : "unknown") << std::endl;
         if (gstErr) g_error_free(gstErr);
         return nullptr;
+    }
+
+    GstElement* identity = gst_bin_get_by_name(GST_BIN(pipeline), "sync_probe");
+    if (identity) {
+        GstPad* pad = gst_element_get_static_pad(identity, "sink");
+        if (pad) {
+            gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, syncProbeCallback, nullptr, nullptr);
+            gst_object_unref(pad);
+        }
+        gst_object_unref(identity);
     }
 
     std::cerr << "Pipeline configured: " << pipelineStr.str() << std::endl;
@@ -606,18 +692,18 @@ static void stdinListenerThread(GstElement* pipeline) {
             line.pop_back();
 
         if (line == "pause") {
-            g_pauseRequested = true;
-            setValveDrop(pipeline, true);
+            g_pauseStartPts.store(g_lastRawPts.load());
+            g_pauseRequested.store(true);
             continue;
         }
         if (line == "resume") {
-            g_pauseRequested = false;
-            setValveDrop(pipeline, false);
+            g_resumePending.store(true);
+            g_pauseRequested.store(false);
             continue;
         }
         if (line == "stop") {
             g_stopRequested = true;
-            setValveDrop(pipeline, false);
+            g_pauseRequested.store(false);
             if (pipeline) gst_element_send_event(pipeline, gst_event_new_eos());
             g_stopCv.notify_all();
             return;
@@ -625,7 +711,7 @@ static void stdinListenerThread(GstElement* pipeline) {
     }
     // stdin closed (parent process died) — stop gracefully
     g_stopRequested = true;
-    setValveDrop(pipeline, false);
+    g_pauseRequested.store(false);
     if (pipeline) gst_element_send_event(pipeline, gst_event_new_eos());
     g_stopCv.notify_all();
 }
@@ -691,6 +777,7 @@ int main(int argc, char* argv[]) {
 
     // Step 5: Build and start GStreamer pipeline
     ensureParentDirExists(config.outputPath);
+    resetSyncProbeState(config.startPaused);
 
     GstElement* pipeline = createCapturePipeline(pwFd, nodeId, config, false);
     if (!pipeline) {

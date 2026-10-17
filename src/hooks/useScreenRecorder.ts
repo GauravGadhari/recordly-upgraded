@@ -1727,6 +1727,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						capturesMicrophone: microphoneEnabled,
 						microphoneDeviceId,
 						microphoneLabel: micLabel,
+						startPaused: shouldWarmStartNativeCapture,
 					},
 				);
 				if (nativeResult.success && startWasCancelled()) {
@@ -1809,35 +1810,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						} finally {
 							setCountdownActive(false);
 						}
-
-						const resumeResult = await window.electronAPI.resumeNativeScreenRecording();
-						if (startWasCancelled()) {
-							return;
-						}
-						if (!resumeResult.success) {
-							throw new Error(
-								resumeResult.error ??
-									resumeResult.message ??
-									"Failed to resume native capture after countdown",
-							);
-						}
-						nativeWarmStartActive.current = false;
 					}
 					if (startWasCancelled()) {
 						return;
 					}
 
-					const mainStartedAt = Date.now();
-					micFallbackStartDelayMs.current = null;
-					beginWebcamCapture();
-					resetRecordingClock(mainStartedAt);
-					webcamTimeOffsetMs.current =
-						webcamStartTime.current === null
-							? 0
-							: webcamStartTime.current - mainStartedAt;
-
+					let preparedMicRecorder: MediaRecorder | null = null;
 					// When native mic capture is unavailable or explicitly bypassed,
-					// record mic via browser getUserMedia as a sidecar file.
+					// prepare mic via browser getUserMedia before resuming capture so there is zero latency gap.
 					if (nativeResult.microphoneFallbackRequired && microphoneEnabled) {
 						void logNativeCaptureDiagnostics("start-browser-microphone-fallback");
 						console.info("Using browser microphone processing for this recording.");
@@ -1872,13 +1852,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 								timesliceMs: RECORDER_TIMESLICE_MS,
 							};
 							resetMicFallbackTimingDiagnostics();
-							micFallbackRecorderStartedAt.current = performance.now();
 							recorder.ondataavailable = appendMicFallbackChunk;
-							micFallbackStartDelayMs.current = Math.max(
-								0,
-								Date.now() - mainStartedAt,
-							);
-							recorder.start(RECORDER_TIMESLICE_MS);
+							preparedMicRecorder = recorder;
 							micFallbackRecorder.current = recorder;
 						} catch (micError) {
 							micFallbackStartDelayMs.current = null;
@@ -1901,22 +1876,56 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						}
 					}
 					if (startWasCancelled()) {
-						await stopMicFallbackRecorder();
+						if (preparedMicRecorder) {
+							await stopMicFallbackRecorder();
+						}
 						await stopWebcamRecorder();
 						cleanupCapturedMedia();
 						return;
 					}
 
+					const mainStartedAt = Date.now();
+					micFallbackStartDelayMs.current = 0;
+					if (preparedMicRecorder) {
+						micFallbackRecorderStartedAt.current = performance.now();
+						preparedMicRecorder.start(RECORDER_TIMESLICE_MS);
+					}
+
+					beginWebcamCapture();
+					resetRecordingClock(mainStartedAt);
+					webcamTimeOffsetMs.current =
+						webcamStartTime.current === null
+							? 0
+							: webcamStartTime.current - mainStartedAt;
+
 					setRecording(true);
-					try {
-						await window.electronAPI?.setRecordingState(true, {
-							startTimeMs: mainStartedAt,
-						});
-					} catch (stateError) {
-						console.warn(
-							"Failed to notify main process that native recording started:",
-							stateError,
-						);
+
+					if (shouldWarmStartNativeCapture) {
+						nativeWarmStartActive.current = false;
+						const [resumeResult] = await Promise.all([
+							window.electronAPI.resumeNativeScreenRecording(),
+							window.electronAPI?.setRecordingState(true, {
+								startTimeMs: mainStartedAt,
+							}),
+						]);
+						if (!resumeResult.success) {
+							throw new Error(
+								resumeResult.error ??
+									resumeResult.message ??
+									"Failed to resume native capture after countdown",
+							);
+						}
+					} else {
+						try {
+							await window.electronAPI?.setRecordingState(true, {
+								startTimeMs: mainStartedAt,
+							});
+						} catch (stateError) {
+							console.warn(
+								"Failed to notify main process that native recording started:",
+								stateError,
+							);
+						}
 					}
 
 					return;

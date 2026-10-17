@@ -31,6 +31,13 @@ export function createCountdownController(
 						win.webContents.removeListener("did-fail-load", fail);
 						win.webContents.removeListener("render-process-gone", cancel);
 					}
+					if (win && !win.isDestroyed()) {
+						try {
+							win.hide();
+						} catch {
+							/* ignore */
+						}
+					}
 					resolve(result);
 					if (win && !win.isDestroyed()) win.close();
 				};

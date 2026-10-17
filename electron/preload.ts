@@ -570,6 +570,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			capturesMicrophone?: boolean;
 			microphoneDeviceId?: string;
 			microphoneLabel?: string;
+			startPaused?: boolean;
 		},
 	) => {
 		return ipcRenderer.invoke("start-native-screen-recording", source, options);

@@ -253,6 +253,7 @@ interface Window {
 				capturesMicrophone?: boolean;
 				microphoneDeviceId?: string;
 				microphoneLabel?: string;
+				startPaused?: boolean;
 			},
 		) => Promise<{
 			success: boolean;

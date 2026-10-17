@@ -1146,8 +1146,7 @@ function getCursorVisualState(
 	const latestClick = findLatestInteractionSample(samples, timeMs);
 	const interactionType = latestClick?.interactionType;
 	const ageMs = latestClick ? Math.max(0, timeMs - latestClick.timeMs) : Number.POSITIVE_INFINITY;
-	const clickEffectDelayMs = clickBounceDuration * 0.5;
-	const clickEffectAgeMs = ageMs - clickEffectDelayMs;
+	const clickEffectAgeMs = ageMs;
 	const isClickEvent =
 		interactionType === "click" ||
 		interactionType === "double-click" ||
@@ -1166,6 +1165,7 @@ function getCursorVisualState(
 		cursorType: findLatestStableCursorType(samples, timeMs),
 		interactionType,
 		clickSample: latestClick && isClickEvent ? latestClick : null,
+		clickAgeMs: ageMs,
 		clickBounceProgress,
 		clickDepthIntensity,
 		clickProgress:
@@ -1520,6 +1520,7 @@ export class PixiCursorOverlay {
 		const {
 			cursorType,
 			clickSample,
+			clickAgeMs,
 			clickBounceProgress,
 			clickDepthIntensity,
 			clickProgress,
@@ -1588,6 +1589,14 @@ export class PixiCursorOverlay {
 				if (!sameFrameTime || !this.lastRenderedPoint) {
 					this.state.snapTo(projectedTarget.cx, projectedTarget.cy, timeMs);
 				}
+			} else if (
+				clickSample &&
+				projectedClickSample &&
+				projectedClickSample.visible &&
+				clickAgeMs >= 0 &&
+				clickAgeMs <= 60
+			) {
+				this.state.snapTo(projectedClickSample.cx, projectedClickSample.cy, timeMs);
 			} else {
 				this.state.update(projectedTarget.cx, projectedTarget.cy, timeMs);
 			}
@@ -1866,14 +1875,10 @@ export function drawCursorOnCanvas(
 	const projectedTarget = projectCursorPositionToViewport(target, viewport.sourceCrop);
 	if (!projectedTarget.visible) return;
 
-	smoothedState.update(projectedTarget.cx, projectedTarget.cy, timeMs);
-
-	const px = viewport.x + smoothedState.x * viewport.width;
-	const py = viewport.y + smoothedState.y * viewport.height;
-	const h = config.dotRadius * getCursorViewportScale(viewport.width, config.minViewportScale);
 	const {
 		cursorType,
 		clickSample,
+		clickAgeMs,
 		clickBounceProgress,
 		clickDepthIntensity,
 		clickProgress,
@@ -1886,6 +1891,22 @@ export function drawCursorOnCanvas(
 	const projectedClickSample = clickSample
 		? projectCursorPositionToViewport(clickSample, viewport.sourceCrop)
 		: null;
+
+	if (
+		clickSample &&
+		projectedClickSample &&
+		projectedClickSample.visible &&
+		clickAgeMs >= 0 &&
+		clickAgeMs <= 60
+	) {
+		smoothedState.snapTo(projectedClickSample.cx, projectedClickSample.cy, timeMs);
+	} else {
+		smoothedState.update(projectedTarget.cx, projectedTarget.cy, timeMs);
+	}
+
+	const px = viewport.x + smoothedState.x * viewport.width;
+	const py = viewport.y + smoothedState.y * viewport.height;
+	const h = config.dotRadius * getCursorViewportScale(viewport.width, config.minViewportScale);
 	const clickEffectPx =
 		projectedClickSample && projectedClickSample.visible
 			? viewport.x + projectedClickSample.cx * viewport.width
