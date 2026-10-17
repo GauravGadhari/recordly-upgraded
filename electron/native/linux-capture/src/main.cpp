@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -557,6 +558,15 @@ static std::string buildEncoderPipeline(const std::string& outputPath, bool forc
     return "vp8enc bitrate=28000000 threads=8 cpu-used=4 deadline=1 ! webmmux";
 }
 
+static void setValveDrop(GstElement* pipeline, bool drop) {
+    if (!pipeline) return;
+    GstElement* valve = gst_bin_get_by_name(GST_BIN(pipeline), "pause_valve");
+    if (valve) {
+        g_object_set(G_OBJECT(valve), "drop", drop ? TRUE : FALSE, nullptr);
+        gst_object_unref(valve);
+    }
+}
+
 // ─── Build GStreamer capture pipeline ──────────────────────────────────────
 static GstElement* createCapturePipeline(int pwFd, uint32_t nodeId, const CaptureConfig& config, bool forceSoftware) {
     std::string encoderPipeline = buildEncoderPipeline(config.outputPath, forceSoftware);
@@ -569,6 +579,7 @@ static GstElement* createCapturePipeline(int pwFd, uint32_t nodeId, const Captur
                 << " ! video/x-raw,framerate=" << config.fps << "/1"
                 << " ! videoconvert n-threads=4"
                 << " ! video/x-raw,format=NV12"
+                << " ! valve name=pause_valve drop=false drop-mode=forward-sticky-events"
                 << " ! queue max-size-buffers=60 max-size-time=1000000000 max-size-bytes=0"
                 << " ! " << encoderPipeline
                 << " ! filesink location=\"" << config.outputPath << "\" sync=false";
@@ -596,16 +607,17 @@ static void stdinListenerThread(GstElement* pipeline) {
 
         if (line == "pause") {
             g_pauseRequested = true;
-            if (pipeline) gst_element_set_state(pipeline, GST_STATE_PAUSED);
+            setValveDrop(pipeline, true);
             continue;
         }
         if (line == "resume") {
             g_pauseRequested = false;
-            if (pipeline) gst_element_set_state(pipeline, GST_STATE_PLAYING);
+            setValveDrop(pipeline, false);
             continue;
         }
         if (line == "stop") {
             g_stopRequested = true;
+            setValveDrop(pipeline, false);
             if (pipeline) gst_element_send_event(pipeline, gst_event_new_eos());
             g_stopCv.notify_all();
             return;
@@ -613,6 +625,7 @@ static void stdinListenerThread(GstElement* pipeline) {
     }
     // stdin closed (parent process died) — stop gracefully
     g_stopRequested = true;
+    setValveDrop(pipeline, false);
     if (pipeline) gst_element_send_event(pipeline, gst_event_new_eos());
     g_stopCv.notify_all();
 }
@@ -748,12 +761,30 @@ int main(int argc, char* argv[]) {
     // Monitor GStreamer bus for EOS or ERROR
     GstBus* bus = gst_element_get_bus(pipeline);
     bool running = true;
-    while (running && !g_stopRequested) {
+    bool pipelineError = false;
+    auto stopWaitStart = std::chrono::steady_clock::time_point::min();
+
+    while (running) {
         GstMessage* msg = gst_bus_timed_pop(bus, 100 * GST_MSECOND); // 100ms poll
-        if (!msg) continue;
+        if (!msg) {
+            if (g_stopRequested) {
+                if (stopWaitStart == std::chrono::steady_clock::time_point::min()) {
+                    stopWaitStart = std::chrono::steady_clock::now();
+                } else {
+                    auto elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::steady_clock::now() - stopWaitStart).count();
+                    if (elapsedSec >= 8) {
+                        std::cerr << "WARN: Timed out waiting for EOS after stop (8s)" << std::endl;
+                        running = false;
+                    }
+                }
+            }
+            continue;
+        }
 
         switch (GST_MESSAGE_TYPE(msg)) {
             case GST_MESSAGE_EOS:
+                std::cerr << "Pipeline received EOS, container finalized." << std::endl;
                 running = false;
                 break;
             case GST_MESSAGE_ERROR: {
@@ -765,6 +796,7 @@ int main(int argc, char* argv[]) {
                           << " (" << (debug ? debug : "") << ")" << std::endl;
                 if (gerr) g_error_free(gerr);
                 if (debug) g_free(debug);
+                pipelineError = true;
                 running = false;
                 break;
             }
@@ -774,15 +806,6 @@ int main(int argc, char* argv[]) {
         gst_message_unref(msg);
     }
 
-    // If stop was requested but EOS wasn't received yet, send it and wait briefly
-    if (g_stopRequested && running) {
-        gst_element_send_event(pipeline, gst_event_new_eos());
-        // Wait up to 3s for EOS
-        GstMessage* eosMsg = gst_bus_timed_pop_filtered(bus, 3 * GST_SECOND,
-            (GstMessageType)(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
-        if (eosMsg) gst_message_unref(eosMsg);
-    }
-
     gst_object_unref(bus);
 
     // Cleanup
@@ -790,6 +813,11 @@ int main(int argc, char* argv[]) {
     gst_object_unref(pipeline);
     close(pwFd);
     portalCloseSession(conn, sessionHandle);
+
+    if (pipelineError) {
+        std::cerr << "ERROR: Capture pipeline failed during recording" << std::endl;
+        return 1;
+    }
 
     std::cout << "Recording stopped. Output path: " << config.outputPath << std::endl;
     std::cout.flush();

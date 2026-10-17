@@ -1300,8 +1300,12 @@ export function registerRecordingHandlers(
 
 					if (fallbackPath) {
 						try {
-							await fs.access(fallbackPath);
-							return await finalizeStoredVideo(fallbackPath);
+							const stat = await fs.stat(fallbackPath);
+							if (stat.size > 1024) {
+								return await finalizeStoredVideo(fallbackPath);
+							}
+							// File is 0-byte or empty, remove it
+							await fs.rm(fallbackPath, { force: true }).catch(() => {});
 						} catch {
 							// fallback file absent
 						}
@@ -1318,7 +1322,10 @@ export function registerRecordingHandlers(
 			if (process.platform !== "darwin") {
 				return {
 					success: false,
-					message: "Native screen recording is only available on macOS.",
+					message:
+						process.platform === "linux"
+							? "No native Linux screen recording is active."
+							: "Native screen recording is only available on macOS.",
 				};
 			}
 
