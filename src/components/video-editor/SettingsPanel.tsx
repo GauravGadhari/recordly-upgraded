@@ -3901,6 +3901,9 @@ export function SettingsPanel({
 														formatValue={(v) => `${v.toFixed(1)}x`}
 														parseInput={(t) => parseFloat(t.replace(/x$/, ""))}
 													/>
+													<p className="mt-0.5 text-[9.5px] text-emerald-400/90 bg-emerald-950/40 border border-emerald-500/20 rounded px-2 py-1 leading-normal">
+														Continuous Curve Editor: Click the Whooshes track on the timeline to expand the speed graph and customize whoosh motion curves.
+													</p>
 												</div>
 											) : null}
 										</div>

@@ -16,6 +16,7 @@ import type { useTimelineState } from "../state/useTimelineState";
 import {
 	DEFAULT_CURSOR_SFX_SETTINGS,
 	type CursorSfxSettings,
+	type WhooshCurvePoint,
 } from "../timeline/sfxSuggestionUtils";
 import TimelineEditor, { type TimelineEditorHandle } from "../timeline/TimelineEditor";
 
@@ -108,6 +109,38 @@ export function EditorTimelinePanel(props: Props) {
 		],
 	);
 
+	const handleWhooshCurvePointsChange = useCallback(
+		(newPoints: WhooshCurvePoint[]) => {
+			const updatedSettings: CursorSfxSettings = {
+				...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+				whooshCurvePoints: newPoints,
+			};
+			onCursorSfxChange?.(updatedSettings);
+
+			if (cursorSfx?.whooshEnabled !== false) {
+				audioCommands.handleGenerateCursorSfx({
+					telemetry: normalizedCursorTelemetry,
+					zoomRegions: timeline.zoomRegions,
+					keystrokes: timeline.keystrokes,
+					duration: projection.timelineDuration,
+					options: {
+						settings: updatedSettings,
+						types: { whooshes: true },
+					},
+				});
+			}
+		},
+		[
+			cursorSfx,
+			onCursorSfxChange,
+			audioCommands,
+			normalizedCursorTelemetry,
+			timeline.zoomRegions,
+			timeline.keystrokes,
+			projection.timelineDuration,
+		],
+	);
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<TimelineEditor
@@ -122,6 +155,8 @@ export function EditorTimelinePanel(props: Props) {
 				cursorTelemetry={normalizedCursorTelemetry}
 				whooshVelocityThreshold={cursorSfx?.whooshVelocityThreshold ?? 1.6}
 				onWhooshThresholdChange={handleWhooshThresholdChange}
+				whooshCurvePoints={cursorSfx?.whooshCurvePoints}
+				onWhooshCurvePointsChange={handleWhooshCurvePointsChange}
 				autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 				onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 				disableSuggestedZooms={disableSuggestedZooms}

@@ -23,7 +23,8 @@ import {
 	ZOOM_ROW_ID,
 } from "../../core/constants";
 import type { CursorTelemetryPoint, TransitionRegion, TransitionType } from "../../../types";
-import { WhooshMovementWaveform } from "../waveform/WhooshMovementWaveform";
+import { WhooshCurveEditor } from "../waveform/WhooshCurveEditor";
+import type { WhooshCurvePoint } from "../../sfxSuggestionUtils";
 import {
 	getAnnotationTrackIndex,
 	getAnnotationTrackRowId,
@@ -113,6 +114,8 @@ interface TimelineCanvasProps {
 	cursorTelemetry?: CursorTelemetryPoint[];
 	whooshVelocityThreshold?: number;
 	onWhooshThresholdChange?: (threshold: number) => void;
+	whooshCurvePoints?: WhooshCurvePoint[];
+	onWhooshCurvePointsChange?: (points: WhooshCurvePoint[]) => void;
 }
 
 interface LaneHoverParams {
@@ -484,6 +487,8 @@ interface TimelineCanvasRowsProps {
 	cursorTelemetry?: CursorTelemetryPoint[];
 	whooshVelocityThreshold?: number;
 	onWhooshThresholdChange?: (threshold: number) => void;
+	whooshCurvePoints?: WhooshCurvePoint[];
+	onWhooshCurvePointsChange?: (points: WhooshCurvePoint[]) => void;
 }
 
 interface AudioItemWithWaveformProps {
@@ -586,7 +591,10 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	cursorTelemetry,
 	whooshVelocityThreshold,
 	onWhooshThresholdChange,
+	whooshCurvePoints,
+	onWhooshCurvePointsChange,
 }: TimelineCanvasRowsProps) {
+	const [isWhooshCurveEditorOpen, setIsWhooshCurveEditorOpen] = useState(false);
 	const hiddenIds = useMemo(() => new Set(liveHiddenItemIds ?? []), [liveHiddenItemIds]);
 	const {
 		clipItems,
@@ -1161,18 +1169,24 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 					rowLabel = `Audio ${trackIndex + 1}`;
 				}
 
+				const isWhooshTrack = trackIndex === 1;
+				const effectiveHeight =
+					isWhooshTrack && isWhooshCurveEditorOpen
+						? Math.max(175, trackHeights[rowId] ?? 175)
+						: (trackHeights[rowId] ?? 40);
+
 				return (
 					<Row
 						key={rowId}
 						id={rowId}
-						label={rowLabel}
+						label={isWhooshTrack ? (isWhooshCurveEditorOpen ? "Whoosh Curve ▲" : "Whooshes (Curve)") : rowLabel}
 						isEmpty={
-							trackIndex === 1 && cursorTelemetry && cursorTelemetry.length >= 2
+							isWhooshTrack && cursorTelemetry && cursorTelemetry.length >= 2
 								? false
 								: rowItems.length === 0
 						}
-						hint={rowHint}
-						height={trackHeights[rowId] ?? 40}
+						hint={isWhooshTrack ? undefined : rowHint}
+						height={effectiveHeight}
 						onHeightChange={(h) => setRowHeight(rowId, h)}
 						isMuted={isRowMuted(rowId)}
 						onToggleMute={() => toggleMute(rowId)}
@@ -1180,25 +1194,35 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 						onToggleSolo={() => toggleSolo(rowId)}
 						showMute
 						showSolo
+						onClick={
+							isWhooshTrack
+								? () => setIsWhooshCurveEditorOpen((open) => !open)
+								: undefined
+						}
 					>
-						{trackIndex === 1 && cursorTelemetry && cursorTelemetry.length >= 2 && (
-							<WhooshMovementWaveform
-								cursorTelemetry={cursorTelemetry}
+						{isWhooshTrack ? (
+							<WhooshCurveEditor
+								cursorTelemetry={cursorTelemetry ?? []}
 								videoDurationMs={videoDurationMs}
 								threshold={whooshVelocityThreshold}
 								onThresholdChange={onWhooshThresholdChange}
+								curvePoints={whooshCurvePoints}
+								onCurvePointsChange={onWhooshCurvePointsChange}
+								isOpen={isWhooshCurveEditorOpen}
+								onToggleOpen={setIsWhooshCurveEditorOpen}
 							/>
+						) : (
+							rowItems.map((item) => (
+								<AudioItemWithWaveform
+									key={item.id}
+									item={item}
+									span={item.span}
+									waveformSpan={liveSpanPreviewById?.[item.id] ?? item.span}
+									isSelected={item.id === selectedAudioId}
+									onSelectAudio={onSelectAudio}
+								/>
+							))
 						)}
-						{rowItems.map((item) => (
-							<AudioItemWithWaveform
-								key={item.id}
-								item={item}
-								span={item.span}
-								waveformSpan={liveSpanPreviewById?.[item.id] ?? item.span}
-								isSelected={item.id === selectedAudioId}
-								onSelectAudio={onSelectAudio}
-							/>
-						))}
 					</Row>
 				);
 			})}
@@ -1253,6 +1277,8 @@ export default function TimelineCanvas({
 	cursorTelemetry,
 	whooshVelocityThreshold,
 	onWhooshThresholdChange,
+	whooshCurvePoints,
+	onWhooshCurvePointsChange,
 }: TimelineCanvasProps) {
 	const { setTimelineRef, style, sidebarWidth, direction, range, valueToPixels, pixelsToValue } =
 		useTimelineContext();
@@ -1625,6 +1651,8 @@ export default function TimelineCanvas({
 					cursorTelemetry={cursorTelemetry}
 					whooshVelocityThreshold={whooshVelocityThreshold}
 					onWhooshThresholdChange={onWhooshThresholdChange}
+					whooshCurvePoints={whooshCurvePoints}
+					onWhooshCurvePointsChange={onWhooshCurvePointsChange}
 				/>
 			</div>
 		</div>

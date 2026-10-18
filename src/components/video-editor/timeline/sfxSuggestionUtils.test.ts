@@ -13,6 +13,8 @@ import {
 	getDragSfxAudioPath,
 	getWhooshSfxAudioPath,
 	SFX_PEAK_OFFSETS_MS,
+	evaluateCurveMultiplierAtTime,
+	type WhooshCurvePoint,
 } from "./sfxSuggestionUtils";
 
 describe("sfxSuggestionUtils", () => {
@@ -465,6 +467,47 @@ describe("sfxSuggestionUtils", () => {
 		expect(scrollRegions[0].trackIndex).toBe(4);
 		expect(scrollRegions[0].category).toBe("Cursor SFX");
 		expect(scrollRegions[0].audioPath).toMatch(/^data:audio\/wav;base64,/);
+	});
+
+	it("modulates whoosh velocity curve smoothly using custom control points", () => {
+		const curvePoints: WhooshCurvePoint[] = [
+			{ id: "cp-1", timeMs: 500, multiplier: 1.8 },
+			{ id: "cp-2", timeMs: 1500, multiplier: 0.3 },
+		];
+
+		// Right at the keyframe time, multiplier matches closely
+		const peakMultiplier = evaluateCurveMultiplierAtTime(curvePoints, 500);
+		expect(peakMultiplier).toBeGreaterThanOrEqual(1.75);
+
+		const valleyMultiplier = evaluateCurveMultiplierAtTime(curvePoints, 1500);
+		expect(valleyMultiplier).toBeLessThanOrEqual(0.35);
+
+		// Far away from any control points, returns ~1.0
+		const baselineMultiplier = evaluateCurveMultiplierAtTime(curvePoints, 3500);
+		expect(baselineMultiplier).toBeCloseTo(1.0, 1);
+
+		// Test whoosh generation with curve points
+		const sweepSamples: CursorTelemetryPoint[] = [
+			{ timeMs: 400, cx: 0.1, cy: 0.1 },
+			{ timeMs: 460, cx: 0.45, cy: 0.45 },
+			{ timeMs: 520, cx: 0.85, cy: 0.85 },
+			{ timeMs: 580, cx: 0.9, cy: 0.9 },
+		];
+
+		const regions = generateAutoCursorSfxRegions({
+			telemetry: sweepSamples,
+			durationMs: 5000,
+			options: {
+				settings: {
+					whooshStyle: "procedural",
+					whooshCurvePoints: curvePoints,
+				},
+			},
+		});
+
+		const whooshes = regions.filter((r) => r.trackIndex === 1);
+		expect(whooshes.length).toBeGreaterThanOrEqual(1);
+		expect(whooshes[0].audioPath).toMatch(/^data:audio\/wav;base64,/);
 	});
 });
 

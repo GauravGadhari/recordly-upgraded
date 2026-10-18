@@ -1172,6 +1172,17 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 								5.0,
 							)
 						: DEFAULT_CURSOR_SFX_SETTINGS.whooshVelocityThreshold ?? 1.6,
+					whooshCurvePoints: Array.isArray(
+						(editor as Partial<ProjectEditorState>).cursorSfx?.whooshCurvePoints,
+					)
+						? (editor as Partial<ProjectEditorState>).cursorSfx!.whooshCurvePoints!.filter(
+								(p) =>
+									p &&
+									typeof p.id === "string" &&
+									isFiniteNumber(p.timeMs) &&
+									isFiniteNumber(p.multiplier),
+							)
+						: [],
 				}
 			: DEFAULT_CURSOR_SFX_SETTINGS,
 		borderRadius: isFiniteNumber(editor.borderRadius)

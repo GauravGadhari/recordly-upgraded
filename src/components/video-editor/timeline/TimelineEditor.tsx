@@ -26,6 +26,7 @@ import type {
 	ZoomOutRegion,
 	ZoomRegion,
 } from "../types";
+import type { WhooshCurvePoint } from "./sfxSuggestionUtils";
 import KeyframeMarkers from "./components/markers/KeyframeMarkers";
 import TimelineScrollbar from "./components/scrollbar/TimelineScrollbar";
 import TimelineCanvas from "./components/viewport/TimelineCanvas";
@@ -121,6 +122,8 @@ export interface TimelineEditorProps {
 	aspectRatio?: AspectRatio;
 	whooshVelocityThreshold?: number;
 	onWhooshThresholdChange?: (threshold: number) => void;
+	whooshCurvePoints?: WhooshCurvePoint[];
+	onWhooshCurvePointsChange?: (points: WhooshCurvePoint[]) => void;
 }
 
 const EMPTY_REGIONS: never[] = [];
@@ -231,6 +234,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			aspectRatio,
 			whooshVelocityThreshold,
 			onWhooshThresholdChange,
+			whooshCurvePoints,
+			onWhooshCurvePointsChange,
 		},
 		ref,
 	) {
@@ -632,6 +637,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							cursorTelemetry={cursorTelemetry}
 							whooshVelocityThreshold={whooshVelocityThreshold}
 							onWhooshThresholdChange={onWhooshThresholdChange}
+							whooshCurvePoints={whooshCurvePoints}
+							onWhooshCurvePointsChange={onWhooshCurvePointsChange}
 						/>
 					</TimelineWrapper>
 				</div>

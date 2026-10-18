@@ -1,4 +1,5 @@
 import type { CursorTelemetryPoint } from "../types";
+import { evaluateCurveMultiplierAtTime, type WhooshCurvePoint } from "./sfxSuggestionUtils";
 
 export interface ProceduralWhooshOptions {
 	sampleRate?: number;
@@ -7,6 +8,7 @@ export interface ProceduralWhooshOptions {
 	volume?: number;
 	enableStereo?: boolean;
 	durationMs?: number;
+	curvePoints?: WhooshCurvePoint[];
 }
 
 export interface GeneratedWhoosh {
@@ -172,7 +174,11 @@ export function synthesizeCursorWhooshWav(
 			const p2 = points[i + 1];
 			const dt = Math.max(0.005, (p2.timeMs - p1.timeMs) / 1000);
 			const dist = Math.hypot(p2.cx - p1.cx, p2.cy - p1.cy);
-			const v = dist / dt;
+			let v = dist / dt;
+			if (options.curvePoints && options.curvePoints.length > 0) {
+				const mid = (p1.timeMs + p2.timeMs) / 2;
+				v *= evaluateCurveMultiplierAtTime(options.curvePoints, mid);
+			}
 			velocities.push(v);
 			if (v > peakVelocity) peakVelocity = v;
 		}
@@ -214,6 +220,10 @@ export function synthesizeCursorWhooshWav(
 			const bell = Math.sin(progress * Math.PI);
 			v = bell * 2.5;
 			cx = 0.5;
+		}
+
+		if (options.curvePoints && options.curvePoints.length > 0) {
+			v *= evaluateCurveMultiplierAtTime(options.curvePoints, currentMs);
 		}
 
 		const normV = Math.max(0, Math.min(1, v / peakVelocity));

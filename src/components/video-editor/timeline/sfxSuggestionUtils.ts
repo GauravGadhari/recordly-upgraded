@@ -18,6 +18,39 @@ export type WhooshSfxStyle = "procedural" | "fast" | "swoosh";
 export type WhooshTriggerMode = "both" | "zooms" | "movement";
 export type KeystrokeSfxStyle = ProceduralKeystrokeStyle;
 
+export interface WhooshCurvePoint {
+	id: string;
+	timeMs: number;
+	multiplier: number; // 1.0 = raw mouse math, > 1.0 = boost, < 1.0 = reduce
+}
+
+/**
+ * Evaluates the continuous curve multiplier at a given time using Gaussian radial basis influence.
+ */
+export function evaluateCurveMultiplierAtTime(
+	points: WhooshCurvePoint[] | undefined,
+	timeMs: number,
+	influenceRadiusMs = 350,
+): number {
+	if (!points || points.length === 0) return 1.0;
+
+	let weightedSum = 0;
+	let totalWeight = 0;
+	const twoSigmaSq = 2 * influenceRadiusMs * influenceRadiusMs;
+
+	for (const pt of points) {
+		const diff = Math.abs(timeMs - pt.timeMs);
+		if (diff <= influenceRadiusMs * 2.5) {
+			const w = Math.exp(-(diff * diff) / twoSigmaSq);
+			weightedSum += (pt.multiplier - 1.0) * w;
+			totalWeight += w;
+		}
+	}
+
+	if (totalWeight <= 0) return 1.0;
+	return Math.max(0.05, Math.min(4.0, 1.0 + weightedSum));
+}
+
 export interface CursorSfxSettings {
 	enabled: boolean;
 	clickEnabled: boolean;
@@ -31,6 +64,7 @@ export interface CursorSfxSettings {
 	whooshStyle: WhooshSfxStyle;
 	whooshTriggers: WhooshTriggerMode;
 	whooshVelocityThreshold?: number;
+	whooshCurvePoints?: WhooshCurvePoint[];
 	zoomSfxEnabled?: boolean;
 	zoomSfxVolume?: number;
 	keystrokeEnabled?: boolean;
@@ -55,6 +89,7 @@ export const DEFAULT_CURSOR_SFX_SETTINGS: CursorSfxSettings = {
 	whooshStyle: "procedural",
 	whooshTriggers: "both",
 	whooshVelocityThreshold: 1.6,
+	whooshCurvePoints: [],
 	zoomSfxEnabled: true,
 	zoomSfxVolume: 0.6,
 	keystrokeEnabled: true,
@@ -397,6 +432,7 @@ export function detectCursorWhooshes(
 	triggers: WhooshTriggerMode = "both",
 	velocityThreshold = 1.6, // screen widths per sec
 	cooldownMs = 1200,
+	curvePoints?: WhooshCurvePoint[],
 ): number[] {
 	const events = detectCursorWhooshEvents(
 		samples,
@@ -404,6 +440,7 @@ export function detectCursorWhooshes(
 		triggers,
 		velocityThreshold,
 		cooldownMs,
+		curvePoints,
 	);
 	return events.map((e) => (e.type === "movement" ? e.peakMs : e.startMs));
 }
@@ -418,6 +455,7 @@ export function detectCursorWhooshEvents(
 	triggers: WhooshTriggerMode = "both",
 	velocityThreshold = 1.6, // screen widths per sec
 	cooldownMs = 1200,
+	curvePoints?: WhooshCurvePoint[],
 ): CursorWhooshEvent[] {
 	const events: CursorWhooshEvent[] = [];
 
@@ -465,7 +503,9 @@ export function detectCursorWhooshEvents(
 			if (dt <= 0.005 || dt > 0.4) continue;
 
 			const dist = Math.hypot(curr.cx - prev.cx, curr.cy - prev.cy);
-			const velocity = dist / dt;
+			const rawVelocity = dist / dt;
+			const midTime = Math.round((prev.timeMs + curr.timeMs) / 2);
+			const velocity = rawVelocity * evaluateCurveMultiplierAtTime(curvePoints, midTime);
 
 			if (velocity >= velocityThreshold) {
 				const onsetTime = prev.timeMs;
@@ -479,7 +519,10 @@ export function detectCursorWhooshEvents(
 					const pA = samples[startIdx - 1];
 					const pB = samples[startIdx];
 					const stepDt = Math.max(0.005, (pB.timeMs - pA.timeMs) / 1000);
-					const stepV = Math.hypot(pB.cx - pA.cx, pB.cy - pA.cy) / stepDt;
+					const stepMid = Math.round((pA.timeMs + pB.timeMs) / 2);
+					const stepV =
+						(Math.hypot(pB.cx - pA.cx, pB.cy - pA.cy) / stepDt) *
+						evaluateCurveMultiplierAtTime(curvePoints, stepMid);
 					if (stepV < 0.35) break;
 					startIdx--;
 				}
@@ -487,17 +530,20 @@ export function detectCursorWhooshEvents(
 				// Find when the movement settled (trace forwards continuously)
 				let endIdx = i;
 				let peakVelocity = velocity;
-				let peakTime = Math.round((prev.timeMs + curr.timeMs) / 2);
+				let peakTime = midTime;
 
 				while (endIdx < samples.length - 1) {
 					const pA = samples[endIdx];
 					const pB = samples[endIdx + 1];
 					const stepDt = (pB.timeMs - pA.timeMs) / 1000;
 					if (stepDt > 0.3) break; // pause detected
-					const stepV = Math.hypot(pB.cx - pA.cx, pB.cy - pA.cy) / Math.max(0.005, stepDt);
+					const stepMid = Math.round((pA.timeMs + pB.timeMs) / 2);
+					const stepV =
+						(Math.hypot(pB.cx - pA.cx, pB.cy - pA.cy) / Math.max(0.005, stepDt)) *
+						evaluateCurveMultiplierAtTime(curvePoints, stepMid);
 					if (stepV > peakVelocity) {
 						peakVelocity = stepV;
-						peakTime = Math.round((pA.timeMs + pB.timeMs) / 2);
+						peakTime = stepMid;
 					}
 					// Stop once movement settles below threshold * 0.3 or 0.35
 					if (stepV < Math.min(0.4, velocityThreshold * 0.3)) {
@@ -844,11 +890,15 @@ export function generateAutoCursorSfxRegions(input: {
 		const whooshVelocityThreshold =
 			options.settings?.whooshVelocityThreshold ?? settings.whooshVelocityThreshold ?? 1.6;
 
+		const whooshCurvePoints = options.settings?.whooshCurvePoints ?? settings.whooshCurvePoints;
+
 		const whooshEvents = detectCursorWhooshEvents(
 			telemetry,
 			zoomRegions,
 			effectiveTriggers,
 			whooshVelocityThreshold,
+			1200,
+			whooshCurvePoints,
 		);
 
 		for (const event of whooshEvents) {
@@ -863,6 +913,7 @@ export function generateAutoCursorSfxRegions(input: {
 				if (settings.whooshStyle === "procedural" && event.samples.length >= 2) {
 					const generated = synthesizeCursorWhooshWav(event.samples, {
 						volume: 1.0,
+						curvePoints: whooshCurvePoints,
 					});
 					audioPath = generated.dataUrl;
 					soundDur = generated.durationMs;
