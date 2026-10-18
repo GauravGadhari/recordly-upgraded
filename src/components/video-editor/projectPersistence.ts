@@ -1163,6 +1163,15 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					whooshTriggers:
 						(editor as Partial<ProjectEditorState>).cursorSfx?.whooshTriggers ??
 						DEFAULT_CURSOR_SFX_SETTINGS.whooshTriggers,
+					whooshVelocityThreshold: isFiniteNumber(
+						(editor as Partial<ProjectEditorState>).cursorSfx?.whooshVelocityThreshold,
+					)
+						? clamp(
+								Number((editor as Partial<ProjectEditorState>).cursorSfx?.whooshVelocityThreshold),
+								0.4,
+								5.0,
+							)
+						: DEFAULT_CURSOR_SFX_SETTINGS.whooshVelocityThreshold ?? 1.6,
 				}
 			: DEFAULT_CURSOR_SFX_SETTINGS,
 		borderRadius: isFiniteNumber(editor.borderRadius)

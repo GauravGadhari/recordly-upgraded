@@ -202,8 +202,24 @@ export function useAudioRegionCommands({
 				return 0;
 			}
 
-			// Add generated regions to timeline
-			setAudioRegions((current) => [...current, ...generated]);
+			// Add generated regions to timeline, replacing existing track regions when targeted
+			setAudioRegions((current) => {
+				let filtered = current;
+				const isTargetedWhoosh =
+					Boolean(options?.types?.whooshes) &&
+					!options?.types?.clicks &&
+					!options?.types?.zooms &&
+					!options?.types?.keystrokes &&
+					!options?.types?.drags &&
+					!options?.types?.scrolls;
+
+				if (isTargetedWhoosh) {
+					filtered = current.filter(
+						(r) => r.trackIndex !== 1 && !(r.label?.startsWith("Whoosh") && !r.label?.includes("Zoom")),
+					);
+				}
+				return [...filtered, ...generated];
+			});
 
 			const clicks = generated.filter((r) => r.label === "Click").length;
 			const drags = generated.filter((r) => r.label === "Drag").length;

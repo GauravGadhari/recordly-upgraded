@@ -256,6 +256,8 @@ export function EditorShell(props: Props) {
 							disableSuggestedZooms={!appearance.autoApplyFreshRecordingAutoZooms}
 							currentTime={ui.currentTime}
 							handleSelectAnnotation={handleSelectAnnotation}
+							cursorSfx={appearance.cursorSfx}
+							onCursorSfxChange={appearance.setCursorSfx}
 						/>
 					}
 				/>

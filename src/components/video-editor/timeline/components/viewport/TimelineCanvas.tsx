@@ -22,7 +22,8 @@ import {
 	ZOOM_OUT_ROW_ID,
 	ZOOM_ROW_ID,
 } from "../../core/constants";
-import type { TransitionRegion, TransitionType } from "../../../types";
+import type { CursorTelemetryPoint, TransitionRegion, TransitionType } from "../../../types";
+import { WhooshMovementWaveform } from "../waveform/WhooshMovementWaveform";
 import {
 	getAnnotationTrackIndex,
 	getAnnotationTrackRowId,
@@ -109,6 +110,9 @@ interface TimelineCanvasProps {
 		existingId?: string;
 	}) => void;
 	onRemoveTransition?: (id: string) => void;
+	cursorTelemetry?: CursorTelemetryPoint[];
+	whooshVelocityThreshold?: number;
+	onWhooshThresholdChange?: (threshold: number) => void;
 }
 
 interface LaneHoverParams {
@@ -477,6 +481,9 @@ interface TimelineCanvasRowsProps {
 		existingId?: string;
 	}) => void;
 	onRemoveTransition?: (id: string) => void;
+	cursorTelemetry?: CursorTelemetryPoint[];
+	whooshVelocityThreshold?: number;
+	onWhooshThresholdChange?: (threshold: number) => void;
 }
 
 interface AudioItemWithWaveformProps {
@@ -576,6 +583,9 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	transitionRegions,
 	onApplyCutTransition,
 	onRemoveTransition,
+	cursorTelemetry,
+	whooshVelocityThreshold,
+	onWhooshThresholdChange,
 }: TimelineCanvasRowsProps) {
 	const hiddenIds = useMemo(() => new Set(liveHiddenItemIds ?? []), [liveHiddenItemIds]);
 	const {
@@ -1156,7 +1166,11 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 						key={rowId}
 						id={rowId}
 						label={rowLabel}
-						isEmpty={rowItems.length === 0}
+						isEmpty={
+							trackIndex === 1 && cursorTelemetry && cursorTelemetry.length >= 2
+								? false
+								: rowItems.length === 0
+						}
 						hint={rowHint}
 						height={trackHeights[rowId] ?? 40}
 						onHeightChange={(h) => setRowHeight(rowId, h)}
@@ -1167,6 +1181,14 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 						showMute
 						showSolo
 					>
+						{trackIndex === 1 && cursorTelemetry && cursorTelemetry.length >= 2 && (
+							<WhooshMovementWaveform
+								cursorTelemetry={cursorTelemetry}
+								videoDurationMs={videoDurationMs}
+								threshold={whooshVelocityThreshold}
+								onThresholdChange={onWhooshThresholdChange}
+							/>
+						)}
 						{rowItems.map((item) => (
 							<AudioItemWithWaveform
 								key={item.id}
@@ -1228,6 +1250,9 @@ export default function TimelineCanvas({
 	transitionRegions,
 	onApplyCutTransition,
 	onRemoveTransition,
+	cursorTelemetry,
+	whooshVelocityThreshold,
+	onWhooshThresholdChange,
 }: TimelineCanvasProps) {
 	const { setTimelineRef, style, sidebarWidth, direction, range, valueToPixels, pixelsToValue } =
 		useTimelineContext();
@@ -1597,6 +1622,9 @@ export default function TimelineCanvas({
 					transitionRegions={transitionRegions}
 					onApplyCutTransition={onApplyCutTransition}
 					onRemoveTransition={onRemoveTransition}
+					cursorTelemetry={cursorTelemetry}
+					whooshVelocityThreshold={whooshVelocityThreshold}
+					onWhooshThresholdChange={onWhooshThresholdChange}
 				/>
 			</div>
 		</div>

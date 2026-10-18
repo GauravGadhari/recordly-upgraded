@@ -43,15 +43,15 @@ function ResizeHandle({ direction }: { direction: "horizontal" | "vertical" }) {
 		<PanelResizeHandle
 			className={
 				direction === "horizontal"
-					? "group relative flex w-3 items-center justify-center outline-none"
-					: "group relative flex h-3 items-center justify-center outline-none"
+					? "group relative flex w-3.5 cursor-col-resize items-center justify-center outline-none hover:bg-foreground/[0.04] transition-colors"
+					: "group relative flex h-3.5 cursor-row-resize items-center justify-center outline-none hover:bg-foreground/[0.04] transition-colors"
 			}
 		>
 			<span
 				className={
 					direction === "horizontal"
-						? "h-12 w-px rounded-full bg-foreground/15 transition-colors group-hover:bg-[#2563EB] group-data-[resize-handle-active]:bg-[#2563EB]"
-						: "h-px w-12 rounded-full bg-foreground/15 transition-colors group-hover:bg-[#2563EB] group-data-[resize-handle-active]:bg-[#2563EB]"
+						? "h-14 w-1 rounded-full bg-foreground/20 transition-all group-hover:h-20 group-hover:w-1.5 group-hover:bg-[#2563EB] group-data-[resize-handle-active]:h-24 group-data-[resize-handle-active]:w-1.5 group-data-[resize-handle-active]:bg-[#2563EB]"
+						: "h-1 w-14 rounded-full bg-foreground/20 transition-all group-hover:w-20 group-hover:h-1.5 group-hover:bg-[#2563EB] group-data-[resize-handle-active]:w-24 group-data-[resize-handle-active]:h-1.5 group-data-[resize-handle-active]:bg-[#2563EB]"
 				}
 			/>
 		</PanelResizeHandle>
@@ -155,11 +155,11 @@ export function EditorWorkspace({ sidebar, preview, timeline }: Props) {
 						>
 							<Panel
 								defaultSize={27}
-								minSize={18}
-								maxSize={48}
+								minSize={16}
+								maxSize={55}
 								className="min-h-0 overflow-hidden"
 							>
-								<div className="flex h-full min-h-0 flex-col overflow-hidden">
+								<div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
 									{sidebar}
 								</div>
 							</Panel>

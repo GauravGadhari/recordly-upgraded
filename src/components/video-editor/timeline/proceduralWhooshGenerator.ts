@@ -151,7 +151,7 @@ export function synthesizeCursorWhooshWav(
 		if (points.length >= 2) {
 			const start = points[0].timeMs;
 			const end = points[points.length - 1].timeMs;
-			durationMs = Math.max(180, Math.min(850, end - start));
+			durationMs = Math.max(180, Math.min(3500, end - start));
 		} else {
 			durationMs = 380;
 		}

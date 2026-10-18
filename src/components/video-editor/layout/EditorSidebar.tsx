@@ -72,7 +72,7 @@ export function EditorSidebar({ t, activeSection, setActiveSection, settingsPane
 		[t],
 	);
 	return (
-		<div className="flex h-full min-h-0 flex-shrink-0 gap-1.5 overflow-hidden">
+		<div className="flex h-full min-h-0 w-full flex-1 gap-2 overflow-hidden">
 			<div className="flex flex-shrink-0 flex-col items-center gap-0.5 px-2 py-2">
 				{sections.map((section) => {
 					const isActive = activeSection === section.id;

@@ -30,6 +30,7 @@ export interface CursorSfxSettings {
 	whooshVolume: number;
 	whooshStyle: WhooshSfxStyle;
 	whooshTriggers: WhooshTriggerMode;
+	whooshVelocityThreshold?: number;
 	zoomSfxEnabled?: boolean;
 	zoomSfxVolume?: number;
 	keystrokeEnabled?: boolean;
@@ -53,6 +54,7 @@ export const DEFAULT_CURSOR_SFX_SETTINGS: CursorSfxSettings = {
 	whooshVolume: 0.6,
 	whooshStyle: "procedural",
 	whooshTriggers: "both",
+	whooshVelocityThreshold: 1.6,
 	zoomSfxEnabled: true,
 	zoomSfxVolume: 0.6,
 	keystrokeEnabled: true,
@@ -452,7 +454,8 @@ export function detectCursorWhooshEvents(
 
 	// 2. Rapid cursor sweeps (high velocity)
 	if ((triggers === "both" || triggers === "movement") && samples.length >= 2) {
-		let lastWhooshTime = -99999;
+		let lastWhooshEndTime = -99999;
+		const minGapMs = Math.min(cooldownMs, 200);
 
 		for (let i = 1; i < samples.length; i++) {
 			const prev = samples[i - 1];
@@ -465,48 +468,69 @@ export function detectCursorWhooshEvents(
 			const velocity = dist / dt;
 
 			if (velocity >= velocityThreshold) {
-				const peakTime = Math.round((prev.timeMs + curr.timeMs) / 2);
-				if (peakTime - lastWhooshTime >= cooldownMs) {
-					// Check it doesn't collide with a zoom whoosh within 500ms
-					const overlapsZoom = events.some((e) => Math.abs(e.peakMs - peakTime) < 500);
-					if (!overlapsZoom) {
-						// Expand backwards to find when movement began
-						let startIdx = i - 1;
-						while (startIdx > 0 && samples[startIdx].timeMs >= peakTime - 220) {
-							const pA = samples[startIdx - 1];
-							const pB = samples[startIdx];
-							const stepDt = Math.max(0.005, (pB.timeMs - pA.timeMs) / 1000);
-							const stepV = Math.hypot(pB.cx - pA.cx, pB.cy - pA.cy) / stepDt;
-							if (stepV < 0.45) break;
-							startIdx--;
-						}
-
-						// Expand forwards to find when movement settled
-						let endIdx = i;
-						while (endIdx < samples.length - 1 && samples[endIdx].timeMs <= peakTime + 280) {
-							const pA = samples[endIdx];
-							const pB = samples[endIdx + 1];
-							const stepDt = Math.max(0.005, (pB.timeMs - pA.timeMs) / 1000);
-							const stepV = Math.hypot(pB.cx - pA.cx, pB.cy - pA.cy) / stepDt;
-							if (stepV < 0.45) break;
-							endIdx++;
-						}
-
-						const sweepPoints = samples.slice(startIdx, endIdx + 1);
-						const startMs = Math.round(samples[startIdx].timeMs);
-						const endMs = Math.round(samples[endIdx].timeMs);
-
-						events.push({
-							startMs,
-							endMs: Math.max(startMs + 180, endMs),
-							peakMs: peakTime,
-							peakVelocity: velocity,
-							type: "movement",
-							samples: sweepPoints,
-						});
-						lastWhooshTime = peakTime;
-					}
+				const onsetTime = prev.timeMs;
+				if (onsetTime - lastWhooshEndTime < minGapMs) {
+					continue;
 				}
+
+				// Find when the movement began (trace backwards)
+				let startIdx = i - 1;
+				while (startIdx > 0 && samples[startIdx].timeMs >= onsetTime - 350) {
+					const pA = samples[startIdx - 1];
+					const pB = samples[startIdx];
+					const stepDt = Math.max(0.005, (pB.timeMs - pA.timeMs) / 1000);
+					const stepV = Math.hypot(pB.cx - pA.cx, pB.cy - pA.cy) / stepDt;
+					if (stepV < 0.35) break;
+					startIdx--;
+				}
+
+				// Find when the movement settled (trace forwards continuously)
+				let endIdx = i;
+				let peakVelocity = velocity;
+				let peakTime = Math.round((prev.timeMs + curr.timeMs) / 2);
+
+				while (endIdx < samples.length - 1) {
+					const pA = samples[endIdx];
+					const pB = samples[endIdx + 1];
+					const stepDt = (pB.timeMs - pA.timeMs) / 1000;
+					if (stepDt > 0.3) break; // pause detected
+					const stepV = Math.hypot(pB.cx - pA.cx, pB.cy - pA.cy) / Math.max(0.005, stepDt);
+					if (stepV > peakVelocity) {
+						peakVelocity = stepV;
+						peakTime = Math.round((pA.timeMs + pB.timeMs) / 2);
+					}
+					// Stop once movement settles below threshold * 0.3 or 0.35
+					if (stepV < Math.min(0.4, velocityThreshold * 0.3)) {
+						break;
+					}
+					// Cap max continuous sweep to 3500ms
+					if (pB.timeMs - samples[startIdx].timeMs > 3500) {
+						break;
+					}
+					endIdx++;
+				}
+
+				// Check it doesn't collide with a zoom whoosh within 350ms
+				const overlapsZoom = events.some((e) => Math.abs(e.peakMs - peakTime) < 350);
+				if (!overlapsZoom) {
+					const sweepPoints = samples.slice(startIdx, endIdx + 1);
+					const startMs = Math.round(samples[startIdx].timeMs);
+					const endMs = Math.round(samples[endIdx].timeMs);
+
+					events.push({
+						startMs,
+						endMs: Math.max(startMs + 180, endMs),
+						peakMs: peakTime,
+						peakVelocity,
+						type: "movement",
+						samples: sweepPoints,
+					});
+
+					lastWhooshEndTime = Math.max(startMs + 180, endMs);
+				}
+
+				// Advance index to end of this continuous sweep
+				i = Math.max(i, endIdx);
 			}
 		}
 	}
@@ -817,10 +841,14 @@ export function generateAutoCursorSfxRegions(input: {
 			effectiveTriggers = settings.whooshTriggers;
 		}
 
+		const whooshVelocityThreshold =
+			options.settings?.whooshVelocityThreshold ?? settings.whooshVelocityThreshold ?? 1.6;
+
 		const whooshEvents = detectCursorWhooshEvents(
 			telemetry,
 			zoomRegions,
 			effectiveTriggers,
+			whooshVelocityThreshold,
 		);
 
 		for (const event of whooshEvents) {

@@ -119,6 +119,8 @@ export interface TimelineEditorProps {
 	getSourceAudioTrackSettingsForClip?: (clipId: string | null) => SourceAudioTrackSettings;
 	onSourceAudioTracksMetaChange?: (tracks: SourceAudioTrackMeta) => void;
 	aspectRatio?: AspectRatio;
+	whooshVelocityThreshold?: number;
+	onWhooshThresholdChange?: (threshold: number) => void;
 }
 
 const EMPTY_REGIONS: never[] = [];
@@ -227,6 +229,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			getSourceAudioTrackSettingsForClip,
 			onSourceAudioTracksMetaChange,
 			aspectRatio,
+			whooshVelocityThreshold,
+			onWhooshThresholdChange,
 		},
 		ref,
 	) {
@@ -625,6 +629,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							transitionRegions={transitionRegions}
 							onApplyCutTransition={onApplyCutTransition}
 							onRemoveTransition={onTransitionDelete}
+							cursorTelemetry={cursorTelemetry}
+							whooshVelocityThreshold={whooshVelocityThreshold}
+							onWhooshThresholdChange={onWhooshThresholdChange}
 						/>
 					</TimelineWrapper>
 				</div>

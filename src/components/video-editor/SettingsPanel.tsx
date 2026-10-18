@@ -2201,7 +2201,7 @@ export function SettingsPanel({
 
 	if (isBackgroundPanel) {
 		return (
-			<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-editor-panel rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+			<div className="flex-1 w-full min-w-[260px] bg-editor-panel border border-foreground/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 				<div
 					className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0"
 					style={{ scrollbarGutter: "stable" }}
@@ -3885,6 +3885,22 @@ export function SettingsPanel({
 														formatValue={(v) => `${Math.round(v * 100)}%`}
 														parseInput={(t) => parseFloat(t.replace(/%$/, "")) / 100}
 													/>
+													<SliderControl
+														label="Sensitivity (Threshold)"
+														value={cursorSfx?.whooshVelocityThreshold ?? 1.6}
+														defaultValue={1.6}
+														min={0.4}
+														max={3.8}
+														step={0.1}
+														onChange={(v) =>
+															onCursorSfxChange?.({
+																...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+																whooshVelocityThreshold: v,
+															})
+														}
+														formatValue={(v) => `${v.toFixed(1)}x`}
+														parseInput={(t) => parseFloat(t.replace(/x$/, ""))}
+													/>
 												</div>
 											) : null}
 										</div>
@@ -4254,7 +4270,7 @@ export function SettingsPanel({
 	})();
 
 	return (
-		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-editor-panel rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+		<div className="flex-1 w-full min-w-[260px] bg-editor-panel border border-foreground/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div
 				className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0"
 				style={{ scrollbarGutter: "stable" }}

@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { type RefObject, useCallback } from "react";
 import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import { retimeCaptionFragment } from "../captionTimeline";
 import type { useAnnotationRegionCommands } from "../hooks/useAnnotationRegionCommands";
@@ -13,6 +13,10 @@ import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import type { useZoomOutRegionCommands } from "../hooks/useZoomOutRegionCommands";
 import type { useZoomRegionCommands } from "../hooks/useZoomRegionCommands";
 import type { useTimelineState } from "../state/useTimelineState";
+import {
+	DEFAULT_CURSOR_SFX_SETTINGS,
+	type CursorSfxSettings,
+} from "../timeline/sfxSuggestionUtils";
 import TimelineEditor, { type TimelineEditorHandle } from "../timeline/TimelineEditor";
 
 type Props = {
@@ -39,6 +43,8 @@ type Props = {
 	currentTime: number;
 	handleSelectAnnotation: (id: string | null) => void;
 	aspectRatio?: AspectRatio;
+	cursorSfx?: CursorSfxSettings;
+	onCursorSfxChange?: (settings: CursorSfxSettings) => void;
 };
 
 export function EditorTimelinePanel(props: Props) {
@@ -66,7 +72,41 @@ export function EditorTimelinePanel(props: Props) {
 		currentTime,
 		handleSelectAnnotation,
 		aspectRatio,
+		cursorSfx,
+		onCursorSfxChange,
 	} = props;
+
+	const handleWhooshThresholdChange = useCallback(
+		(newThreshold: number) => {
+			const updatedSettings: CursorSfxSettings = {
+				...(cursorSfx ?? DEFAULT_CURSOR_SFX_SETTINGS),
+				whooshVelocityThreshold: newThreshold,
+			};
+			onCursorSfxChange?.(updatedSettings);
+
+			if (cursorSfx?.whooshEnabled !== false) {
+				audioCommands.handleGenerateCursorSfx({
+					telemetry: normalizedCursorTelemetry,
+					zoomRegions: timeline.zoomRegions,
+					keystrokes: timeline.keystrokes,
+					duration: projection.timelineDuration,
+					options: {
+						settings: updatedSettings,
+						types: { whooshes: true },
+					},
+				});
+			}
+		},
+		[
+			cursorSfx,
+			onCursorSfxChange,
+			audioCommands,
+			normalizedCursorTelemetry,
+			timeline.zoomRegions,
+			timeline.keystrokes,
+			projection.timelineDuration,
+		],
+	);
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -80,6 +120,8 @@ export function EditorTimelinePanel(props: Props) {
 				videoSourcePath={videoSourcePath}
 				cursorTelemetrySourcePath={cursorTelemetrySourcePath}
 				cursorTelemetry={normalizedCursorTelemetry}
+				whooshVelocityThreshold={cursorSfx?.whooshVelocityThreshold ?? 1.6}
+				onWhooshThresholdChange={handleWhooshThresholdChange}
 				autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 				onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 				disableSuggestedZooms={disableSuggestedZooms}
